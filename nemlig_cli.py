@@ -14,14 +14,55 @@ CLI options override the config file.
 """
 
 import argparse
+import itertools
 import json
 import re
 import sys
+import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 import requests
+
+
+class Spinner:
+    """Animated spinner for long-running operations."""
+
+    def __init__(self, message: str = "Loading"):
+        self.message = message
+        self.running = False
+        self.thread = None
+        self.frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    def _spin(self):
+        for frame in itertools.cycle(self.frames):
+            if not self.running:
+                break
+            print(f"\r  {frame} {self.message}...", end="", flush=True)
+            time.sleep(0.08)
+
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self._spin)
+        self.thread.start()
+
+    def stop(self, final_message: str = None):
+        self.running = False
+        if self.thread:
+            self.thread.join()
+        # Clear the line
+        print(f"\r{' ' * (len(self.message) + 10)}\r", end="")
+        if final_message:
+            print(f"  ✓ {final_message}")
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args):
+        self.stop()
 
 
 VERSION = "1.0.0"
@@ -157,6 +198,9 @@ def login(username: str, password: str) -> AuthTokens:
     session = requests.Session()
     headers = get_common_headers()
 
+    spinner = Spinner("Connecting to nemlig.com")
+    spinner.start()
+
     # Step 1: Get XSRF token
     resp = session.get(f"{BASE_URL}/webapi/AntiForgery", headers=headers)
     resp.raise_for_status()
@@ -204,6 +248,8 @@ def login(username: str, password: str) -> AuthTokens:
     resp.raise_for_status()
     xsrf_data = resp.json()
     xsrf_token = xsrf_data["Value"]
+
+    spinner.stop("Connected!")
 
     return AuthTokens(xsrf_token=xsrf_token, bearer_token=bearer_token, session=session)
 
@@ -1011,12 +1057,14 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
 
         elif command == "search" and len(parts) > 1:
             query = " ".join(parts[1:])
-            print(f"Searching for '{query}'...")
+            spinner = Spinner(f"Searching for '{query}'")
+            spinner.start()
             products = search_products(auth, query, limit=10)
             if not products:
-                print(f"No products found for '{query}'")
+                spinner.stop(f"No products found for '{query}'")
             else:
-                print(f"\nFound {len(products)} products:\n")
+                spinner.stop(f"Found {len(products)} products")
+                print()
                 for p in products:
                     price = p.get("Price", 0)
                     name = p.get("Name", "Unknown")
@@ -1029,12 +1077,16 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
 
         elif command == "details" and len(parts) > 1:
             product_id = parts[1]
+            spinner = Spinner(f"Loading product {product_id}")
+            spinner.start()
             try:
                 product = get_product_details(auth, product_id)
+                spinner.stop("Product loaded")
                 print()
                 print(format_product_details(product))
                 print()
             except ProductNotFoundError as e:
+                spinner.stop()
                 print(f"Error: {e}\n")
 
         elif command == "list":
@@ -1045,12 +1097,14 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
                 print()
             elif parts[1] == "add" and len(parts) > 2:
                 query = " ".join(parts[2:])
-                print(f"Searching for '{query}'...")
+                spinner = Spinner(f"Searching for '{query}'")
+                spinner.start()
                 products = search_products(auth, query, limit=10)
                 if not products:
-                    print(f"No products found for '{query}'\n")
+                    spinner.stop(f"No products found for '{query}'")
                 else:
-                    print(f"\nFound {len(products)} products:\n")
+                    spinner.stop(f"Found {len(products)} products")
+                    print()
                     for i, p in enumerate(products, 1):
                         price = p.get("Price", 0)
                         name = p.get("Name", "Unknown")
@@ -1135,7 +1189,10 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
                 print("  Usage: list | list add <query> | list remove <id> | list clear | list budget [amt] | list sync\n")
 
         elif command == "basket":
+            spinner = Spinner("Loading basket")
+            spinner.start()
             basket = get_basket(auth)
+            spinner.stop("Basket loaded")
             lines = basket.get("Lines", [])
             if not lines:
                 print("  Basket is empty\n")
