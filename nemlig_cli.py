@@ -24,6 +24,38 @@ from pathlib import Path
 import requests
 
 
+VERSION = "1.0.0"
+
+LOGO = r"""
+    ░░░    ░░░  ░░░░░░░  ░░░    ░░░  ░░░      ░░░   ░░░░░░░
+    ░░░░   ░░░  ░░░      ░░░░  ░░░░  ░░░      ░░░  ░░░
+    ░░░░░  ░░░  ░░░░░░   ░░░░░░░░░░  ░░░      ░░░  ░░░  ░░░░
+    ░░░ ░░ ░░░  ░░░      ░░░ ░░ ░░░  ░░░      ░░░  ░░░   ░░░
+    ░░░  ░░░░░  ░░░░░░░  ░░░    ░░░  ░░░░░░░  ░░░   ░░░░░░░
+
+    ─────────────────────────────────────────────────────
+
+       ██████╗ ██╗      ██╗    grocery shopping from your terminal
+      ██╔════╝ ██║      ██║    ─────────────────────────────────────
+      ██║      ██║      ██║    search, list, sync - all from the cli
+      ██║      ██║      ██║
+       ██████╗ ███████╗ ██║    v{version}
+       ╚═════╝ ╚══════╝ ╚═╝
+"""
+
+
+def print_welcome(username: str) -> None:
+    """Print welcome banner with logo after login."""
+    print(LOGO.format(version=VERSION))
+    print(f"    Logged in as: {username}")
+    print("    ─────────────────────────────────────────────────────\n")
+
+
+def print_startup_logo() -> None:
+    """Print startup logo before login."""
+    print(LOGO.format(version=VERSION))
+    print("    ─────────────────────────────────────────────────────\n")
+
 CONFIG_FILE = Path.home() / ".config" / "nemlig" / "login.json"
 
 
@@ -54,6 +86,22 @@ def load_config_credentials() -> dict:
         "username": data.get("username"),
         "password": data.get("password"),
     }
+
+
+LIST_FILE = Path.home() / ".config" / "nemlig" / "grocery_list.json"
+
+
+def load_grocery_list() -> dict:
+    """Load grocery list from config file."""
+    if LIST_FILE.exists():
+        return json.loads(LIST_FILE.read_text())
+    return {"budget": 500.0, "items": []}
+
+
+def save_grocery_list(data: dict) -> None:
+    """Save grocery list to config file."""
+    LIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LIST_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
 
 BASE_URL = "https://www.nemlig.com"
@@ -110,14 +158,12 @@ def login(username: str, password: str) -> AuthTokens:
     headers = get_common_headers()
 
     # Step 1: Get XSRF token
-    print("Step 1: Getting XSRF token...", file=sys.stderr)
     resp = session.get(f"{BASE_URL}/webapi/AntiForgery", headers=headers)
     resp.raise_for_status()
     xsrf_data = resp.json()
     xsrf_token = xsrf_data["Value"]
 
     # Step 2: Get Bearer token
-    print("Step 2: Getting Bearer token...", file=sys.stderr)
     headers["X-Correlation-Id"] = str(uuid.uuid4())
     resp = session.get(f"{BASE_URL}/webapi/Token", headers=headers)
     resp.raise_for_status()
@@ -125,7 +171,6 @@ def login(username: str, password: str) -> AuthTokens:
     bearer_token = token_data["access_token"]
 
     # Step 3: Login
-    print("Step 3: Logging in...", file=sys.stderr)
     headers["X-Correlation-Id"] = str(uuid.uuid4())
     headers["X-XSRF-TOKEN"] = xsrf_token
     headers["Authorization"] = f"Bearer {bearer_token}"
@@ -146,8 +191,6 @@ def login(username: str, password: str) -> AuthTokens:
 
     if "RedirectUrl" not in login_result:
         raise Exception(f"Login failed: {login_result}")
-
-    print("Login successful!", file=sys.stderr)
 
     # Get fresh tokens after login
     headers["X-Correlation-Id"] = str(uuid.uuid4())
@@ -411,6 +454,63 @@ def format_basket_line(line: dict) -> str:
     product_id = line.get("Id", "")
 
     return f"  [{product_id}] {name} ({brand}) x{quantity} @ {item_price:.2f} kr = {total_price:.2f} kr"
+
+
+def format_list_item(item: dict) -> str:
+    """Format a grocery list item for display."""
+    name = item.get("name", "Unknown")
+    brand = item.get("brand", "")
+    quantity = item.get("quantity", 1)
+    unit_price = item.get("unit_price", 0)
+    product_id = item.get("product_id", "")
+    subtotal = unit_price * quantity
+
+    brand_str = f" ({brand})" if brand else ""
+    return f"  [{product_id}] {name}{brand_str} x{quantity} @ {unit_price:.2f} kr = {subtotal:.2f} kr"
+
+
+CART_ART = r"""
+   __________
+  /         /|
+ /_________/ |
+ |  NEMLIG | |
+ |_________|/
+    O   O
+"""
+
+def format_list_summary(items: list, budget: float) -> str:
+    """Format full grocery list with budget status."""
+    lines = []
+
+    if not items:
+        lines.append("Your grocery list is empty.")
+        lines.append(f"\nBudget: {budget:.2f} kr")
+        lines.append("\nUse 'list add \"product\"' to add items")
+        return "\n".join(lines)
+
+    # Calculate total
+    total = sum(item.get("unit_price", 0) * item.get("quantity", 1) for item in items)
+    remaining = budget - total
+
+    lines.append(f"Grocery List ({len(items)} items):\n")
+
+    for item in items:
+        lines.append(format_list_item(item))
+
+    lines.append(f"\n  Subtotal:   {total:.2f} kr")
+    lines.append(f"  Budget:     {budget:.2f} kr")
+    lines.append(f"  Remaining:  {remaining:.2f} kr")
+
+    # Budget bar visualization
+    if budget > 0:
+        bar_width = 30
+        filled = min(int((total / budget) * bar_width), bar_width)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        pct = (total / budget) * 100
+        status = "OVER BUDGET!" if pct > 100 else f"{pct:.0f}%"
+        lines.append(f"\n  [{bar}] {status}")
+
+    return "\n".join(lines)
 
 
 def format_order_summary(order: dict) -> str:
@@ -708,9 +808,352 @@ def cmd_history(auth: AuthTokens, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list_show(args: argparse.Namespace) -> int:
+    """Display the current grocery list."""
+    data = load_grocery_list()
+    print(format_list_summary(data["items"], data["budget"]))
+    return 0
+
+
+def cmd_list_add(auth: AuthTokens, args: argparse.Namespace) -> int:
+    """Add a product to the grocery list."""
+    product_id = args.product_id
+    quantity = args.quantity
+
+    # If not a numeric ID, treat as search query
+    if not product_id.isdigit():
+        print(f"Searching for '{product_id}'...", file=sys.stderr)
+        products = search_products(auth, product_id, limit=10)
+
+        if not products:
+            print(f"No products found for '{product_id}'")
+            return 1
+
+        print(f"\nFound {len(products)} products:\n")
+        for i, p in enumerate(products, 1):
+            price = p.get("Price", 0)
+            name = p.get("Name", "Unknown")
+            brand = p.get("Brand", "")
+            pid = p.get("Id", "")
+            available = p.get("Availability", {}).get("IsAvailableInStock", False)
+            stock = "In stock" if available else "OUT OF STOCK"
+            print(f"  [{i}] {name} ({brand}) - {price:.2f} kr [{stock}]")
+
+        print()
+        try:
+            choice = input("Enter number to add (or 'q' to cancel): ").strip()
+            if choice.lower() == 'q':
+                print("Cancelled.")
+                return 0
+            idx = int(choice) - 1
+            if idx < 0 or idx >= len(products):
+                print("Invalid selection.", file=sys.stderr)
+                return 1
+            product = products[idx]
+            product_id = product.get("Id")
+        except (ValueError, EOFError, KeyboardInterrupt):
+            print("\nCancelled.")
+            return 0
+    else:
+        print(f"Fetching product {product_id}...", file=sys.stderr)
+        try:
+            product = get_product_details(auth, product_id)
+        except ProductNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    data = load_grocery_list()
+
+    # Check if product already in list
+    for item in data["items"]:
+        if item["product_id"] == product_id:
+            item["quantity"] += quantity
+            item["unit_price"] = product.get("Price", item["unit_price"])
+            save_grocery_list(data)
+            print(f"Updated quantity: {item['name']} x{item['quantity']}")
+            print(format_list_summary(data["items"], data["budget"]))
+            return 0
+
+    # Add new item
+    new_item = {
+        "product_id": product_id,
+        "name": product.get("Name", "Unknown"),
+        "brand": product.get("Brand", ""),
+        "quantity": quantity,
+        "unit_price": product.get("Price", 0),
+    }
+    data["items"].append(new_item)
+    save_grocery_list(data)
+
+    print(f"Added: {new_item['name']} x{quantity}")
+    print()
+    print(format_list_summary(data["items"], data["budget"]))
+    return 0
+
+
+def cmd_list_remove(args: argparse.Namespace) -> int:
+    """Remove a product from the grocery list."""
+    product_id = args.product_id
+
+    data = load_grocery_list()
+
+    for i, item in enumerate(data["items"]):
+        if item["product_id"] == product_id:
+            removed = data["items"].pop(i)
+            save_grocery_list(data)
+            print(f"Removed: {removed['name']}")
+            print()
+            print(format_list_summary(data["items"], data["budget"]))
+            return 0
+
+    print(f"Product {product_id} not found in list.", file=sys.stderr)
+    return 1
+
+
+def cmd_list_clear(args: argparse.Namespace) -> int:
+    """Clear all items from the grocery list."""
+    data = load_grocery_list()
+    count = len(data["items"])
+    data["items"] = []
+    save_grocery_list(data)
+    print(f"Cleared {count} items from list.")
+    return 0
+
+
+def cmd_list_budget(args: argparse.Namespace) -> int:
+    """Show or set the budget."""
+    data = load_grocery_list()
+
+    if args.amount is not None:
+        data["budget"] = args.amount
+        save_grocery_list(data)
+        print(f"Budget set to {args.amount:.2f} kr")
+    else:
+        print(f"Current budget: {data['budget']:.2f} kr")
+        total = sum(item.get("unit_price", 0) * item.get("quantity", 1) for item in data["items"])
+        remaining = data["budget"] - total
+        print(f"List total:     {total:.2f} kr")
+        print(f"Remaining:      {remaining:.2f} kr")
+
+    return 0
+
+
+def cmd_list_sync(auth: AuthTokens, args: argparse.Namespace) -> int:
+    """Sync grocery list to nemlig basket."""
+    data = load_grocery_list()
+
+    if not data["items"]:
+        print("Grocery list is empty. Nothing to sync.")
+        return 0
+
+    print(f"Syncing {len(data['items'])} items to basket...", file=sys.stderr)
+
+    success_count = 0
+    for item in data["items"]:
+        product_id = item["product_id"]
+        quantity = item["quantity"]
+        try:
+            add_to_basket(auth, product_id, quantity)
+            print(f"  ✓ {item['name']} x{quantity}")
+            success_count += 1
+        except Exception as e:
+            print(f"  ✗ {item['name']} - Error: {e}", file=sys.stderr)
+
+    print(f"\nSynced {success_count}/{len(data['items'])} items to basket.")
+
+    if success_count > 0:
+        print("\nUse 'basket' command to view your nemlig basket.")
+
+    return 0 if success_count == len(data["items"]) else 1
+
+
+def interactive_mode(auth: AuthTokens, username: str) -> int:
+    """Run interactive REPL mode."""
+    print_welcome(username)
+
+    # Show quick help
+    print("    Commands: search <query> | list | list add <query> | basket | help | quit\n")
+
+    while True:
+        try:
+            cmd = input("  nemlig> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n    Goodbye! 👋\n")
+            return 0
+
+        if not cmd:
+            continue
+
+        parts = cmd.split()
+        command = parts[0].lower()
+
+        if command in ("quit", "exit", "q"):
+            print("\n    Goodbye! 👋\n")
+            return 0
+
+        elif command == "help":
+            print("""
+    Available commands:
+    ─────────────────────────────────────────────────────
+    search <query>      Search for products
+    details <id>        Show product details
+    list                Show your grocery list
+    list add <query>    Add product to list (search by name)
+    list remove <id>    Remove product from list
+    list clear          Clear grocery list
+    list budget [amt]   Show/set budget
+    list sync           Push list to nemlig basket
+    basket              Show nemlig basket
+    help                Show this help
+    quit                Exit
+    ─────────────────────────────────────────────────────
+""")
+
+        elif command == "search" and len(parts) > 1:
+            query = " ".join(parts[1:])
+            print(f"Searching for '{query}'...")
+            products = search_products(auth, query, limit=10)
+            if not products:
+                print(f"No products found for '{query}'")
+            else:
+                print(f"\nFound {len(products)} products:\n")
+                for p in products:
+                    price = p.get("Price", 0)
+                    name = p.get("Name", "Unknown")
+                    brand = p.get("Brand", "")
+                    pid = p.get("Id", "")
+                    available = p.get("Availability", {}).get("IsAvailableInStock", False)
+                    stock = "In stock" if available else "OUT OF STOCK"
+                    print(f"  [{pid}] {name} ({brand}) - {price:.2f} kr [{stock}]")
+            print()
+
+        elif command == "details" and len(parts) > 1:
+            product_id = parts[1]
+            try:
+                product = get_product_details(auth, product_id)
+                print()
+                print(format_product_details(product))
+                print()
+            except ProductNotFoundError as e:
+                print(f"Error: {e}\n")
+
+        elif command == "list":
+            if len(parts) == 1:
+                # Show list
+                data = load_grocery_list()
+                print(format_list_summary(data["items"], data["budget"]))
+                print()
+            elif parts[1] == "add" and len(parts) > 2:
+                query = " ".join(parts[2:])
+                print(f"Searching for '{query}'...")
+                products = search_products(auth, query, limit=10)
+                if not products:
+                    print(f"No products found for '{query}'\n")
+                else:
+                    print(f"\nFound {len(products)} products:\n")
+                    for i, p in enumerate(products, 1):
+                        price = p.get("Price", 0)
+                        name = p.get("Name", "Unknown")
+                        brand = p.get("Brand", "")
+                        available = p.get("Availability", {}).get("IsAvailableInStock", False)
+                        stock = "In stock" if available else "OUT OF STOCK"
+                        print(f"  [{i}] {name} ({brand}) - {price:.2f} kr [{stock}]")
+                    print()
+                    try:
+                        choice = input("  Enter number to add (or 'q' to cancel): ").strip()
+                        if choice.lower() != 'q':
+                            idx = int(choice) - 1
+                            if 0 <= idx < len(products):
+                                product = products[idx]
+                                data = load_grocery_list()
+                                product_id = product.get("Id")
+                                # Check if already in list
+                                found = False
+                                for item in data["items"]:
+                                    if item["product_id"] == product_id:
+                                        item["quantity"] += 1
+                                        item["unit_price"] = product.get("Price", item["unit_price"])
+                                        found = True
+                                        break
+                                if not found:
+                                    data["items"].append({
+                                        "product_id": product_id,
+                                        "name": product.get("Name", "Unknown"),
+                                        "brand": product.get("Brand", ""),
+                                        "quantity": 1,
+                                        "unit_price": product.get("Price", 0),
+                                    })
+                                save_grocery_list(data)
+                                print(f"\n  ✓ Added: {product.get('Name')}")
+                                print(format_list_summary(data["items"], data["budget"]))
+                    except (ValueError, KeyboardInterrupt):
+                        print("Cancelled.")
+                    print()
+            elif parts[1] == "remove" and len(parts) > 2:
+                product_id = parts[2]
+                data = load_grocery_list()
+                for i, item in enumerate(data["items"]):
+                    if item["product_id"] == product_id:
+                        removed = data["items"].pop(i)
+                        save_grocery_list(data)
+                        print(f"  ✓ Removed: {removed['name']}\n")
+                        break
+                else:
+                    print(f"  Product {product_id} not in list\n")
+            elif parts[1] == "clear":
+                data = load_grocery_list()
+                count = len(data["items"])
+                data["items"] = []
+                save_grocery_list(data)
+                print(f"  ✓ Cleared {count} items\n")
+            elif parts[1] == "budget":
+                data = load_grocery_list()
+                if len(parts) > 2:
+                    try:
+                        data["budget"] = float(parts[2])
+                        save_grocery_list(data)
+                        print(f"  ✓ Budget set to {data['budget']:.2f} kr\n")
+                    except ValueError:
+                        print("  Invalid amount\n")
+                else:
+                    total = sum(item.get("unit_price", 0) * item.get("quantity", 1) for item in data["items"])
+                    print(f"  Budget: {data['budget']:.2f} kr | Used: {total:.2f} kr | Remaining: {data['budget'] - total:.2f} kr\n")
+            elif parts[1] == "sync":
+                data = load_grocery_list()
+                if not data["items"]:
+                    print("  List is empty\n")
+                else:
+                    print(f"  Syncing {len(data['items'])} items...")
+                    for item in data["items"]:
+                        try:
+                            add_to_basket(auth, item["product_id"], item["quantity"])
+                            print(f"    ✓ {item['name']} x{item['quantity']}")
+                        except Exception as e:
+                            print(f"    ✗ {item['name']} - {e}")
+                    print("  Done! Use 'basket' to view.\n")
+            else:
+                print("  Usage: list | list add <query> | list remove <id> | list clear | list budget [amt] | list sync\n")
+
+        elif command == "basket":
+            basket = get_basket(auth)
+            lines = basket.get("Lines", [])
+            if not lines:
+                print("  Basket is empty\n")
+            else:
+                print(f"\n  Basket ({len(lines)} items):\n")
+                total = 0
+                for line in lines:
+                    print(f"  {format_basket_line(line)}")
+                    total += line.get("Price", 0)
+                print(f"\n  Total: {total:.2f} kr\n")
+
+        else:
+            print("  Unknown command. Type 'help' for available commands.\n")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Nemlig.com CLI - Command-line interface for grocery shopping",
+        description=LOGO.format(version=VERSION),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Credentials:
@@ -722,21 +1165,18 @@ Credentials:
 
 Examples:
   %(prog)s search "cocio"
-  %(prog)s details 701025
+  %(prog)s list add "mælk"
+  %(prog)s list
+  %(prog)s list sync
   %(prog)s basket
-  %(prog)s add 701025 --quantity 2
-  %(prog)s history
-  %(prog)s history 12345678
-
-  With explicit credentials:
-  %(prog)s -u EMAIL -p PASS search "cocio"
         """
     )
 
+    parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("-u", "--username", help="Nemlig.com email/username (overrides config file)")
     parser.add_argument("-p", "--password", help="Nemlig.com password (overrides config file)")
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=False)
 
     # Search command
     search_parser = subparsers.add_parser("search", help="Search for products")
@@ -760,7 +1200,47 @@ Examples:
     history_parser.add_argument("order_id", nargs="?", type=int, help="Order ID for details (optional)")
     history_parser.add_argument("-l", "--limit", type=int, default=10, help="Max orders to show (default: 10)")
 
+    # List command with subcommands
+    list_parser = subparsers.add_parser("list", help="Manage grocery list")
+    list_sub = list_parser.add_subparsers(dest="list_cmd")
+
+    # list (show) - default when no subcommand
+    list_sub.add_parser("show", help="Show current grocery list")
+
+    # list add
+    list_add_parser = list_sub.add_parser("add", help="Add product to list")
+    list_add_parser.add_argument("product_id", help="Product ID or search term")
+    list_add_parser.add_argument("-q", "--quantity", type=int, default=1, help="Quantity (default: 1)")
+
+    # list remove
+    list_remove_parser = list_sub.add_parser("remove", help="Remove product from list")
+    list_remove_parser.add_argument("product_id", help="Product ID to remove")
+
+    # list clear
+    list_sub.add_parser("clear", help="Clear all items from list")
+
+    # list budget
+    list_budget_parser = list_sub.add_parser("budget", help="Show or set budget")
+    list_budget_parser.add_argument("amount", nargs="?", type=float, help="New budget amount in kr")
+
+    # list sync
+    list_sub.add_parser("sync", help="Push list items to nemlig basket")
+
     args = parser.parse_args()
+
+    # Handle list commands that don't require authentication
+    if args.command == "list":
+        list_cmd = args.list_cmd
+        # Commands that don't need auth
+        if list_cmd is None or list_cmd == "show":
+            return cmd_list_show(args)
+        elif list_cmd == "remove":
+            return cmd_list_remove(args)
+        elif list_cmd == "clear":
+            return cmd_list_clear(args)
+        elif list_cmd == "budget":
+            return cmd_list_budget(args)
+        # Commands that need auth fall through to below
 
     # Load credentials: config file first, CLI overrides
     try:
@@ -797,6 +1277,13 @@ Examples:
         # Authenticate
         auth = login(username, password)
 
+        # Interactive mode if no command given
+        if args.command is None:
+            return interactive_mode(auth, username)
+
+        # Single command mode - show welcome banner
+        print_welcome(username)
+
         # Execute command
         if args.command == "search":
             return cmd_search(auth, args)
@@ -808,6 +1295,12 @@ Examples:
             return cmd_add(auth, args)
         elif args.command == "history":
             return cmd_history(auth, args)
+        elif args.command == "list":
+            # List commands that require auth
+            if args.list_cmd == "add":
+                return cmd_list_add(auth, args)
+            elif args.list_cmd == "sync":
+                return cmd_list_sync(auth, args)
         else:
             print(f"Unknown command: {args.command}", file=sys.stderr)
             return 1
