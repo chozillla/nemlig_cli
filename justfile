@@ -132,3 +132,19 @@ import SPREADSHEET_ID="":
 # Setup Google Sheets integration
 import-setup:
     uv run python nemlig_cli.py import --setup
+
+# 📷 Scan fridge with camera (barcode + AI detection)
+scan:
+    uv run python nemlig_cli.py scan
+
+# 🧊 Show fridge inventory
+fridge:
+    uv run python nemlig_cli.py fridge
+
+# 🧊 Clear fridge inventory
+fridge-clear:
+    uv run python nemlig_cli.py fridge clear
+
+# 🤖 AI suggestions based on fridge contents
+fridge-suggest:
+    uv run python nemlig_cli.py fridge suggest

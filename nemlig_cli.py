@@ -46,6 +46,24 @@ except ImportError:
 
 GSHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
+# Optional: Barcode scanning and image recognition
+try:
+    import cv2
+    from pyzbar import pyzbar
+    from PIL import Image
+    import openfoodfacts
+    SCANNER_AVAILABLE = True
+except ImportError:
+    SCANNER_AVAILABLE = False
+
+# Optional: Raspberry Pi AI Camera
+try:
+    from picamera2 import Picamera2
+    from picamera2.devices.imx500 import IMX500
+    PICAMERA_AVAILABLE = True
+except ImportError:
+    PICAMERA_AVAILABLE = False
+
 
 class Spinner:
     """Animated spinner for long-running operations."""
@@ -237,6 +255,66 @@ def save_grocery_list(data: dict) -> None:
     """Save grocery list to config file."""
     LIST_FILE.parent.mkdir(parents=True, exist_ok=True)
     LIST_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+# Fridge inventory storage
+FRIDGE_FILE = Path.home() / ".config" / "nemlig" / "fridge_inventory.json"
+
+
+def load_fridge_inventory() -> dict:
+    """Load fridge inventory from config file."""
+    if FRIDGE_FILE.exists():
+        return json.loads(FRIDGE_FILE.read_text())
+    return {"items": [], "last_scan": None}
+
+
+def save_fridge_inventory(data: dict) -> None:
+    """Save fridge inventory to config file."""
+    FRIDGE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    FRIDGE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+# Common produce items for YOLO detection mapping
+PRODUCE_LABELS = {
+    "apple": "æble",
+    "banana": "banan",
+    "orange": "appelsin",
+    "lemon": "citron",
+    "lime": "lime",
+    "grape": "vindrue",
+    "strawberry": "jordbær",
+    "blueberry": "blåbær",
+    "raspberry": "hindbær",
+    "watermelon": "vandmelon",
+    "pineapple": "ananas",
+    "mango": "mango",
+    "avocado": "avocado",
+    "tomato": "tomat",
+    "potato": "kartoffel",
+    "carrot": "gulerod",
+    "onion": "løg",
+    "garlic": "hvidløg",
+    "pepper": "peberfrugt",
+    "cucumber": "agurk",
+    "lettuce": "salat",
+    "cabbage": "kål",
+    "broccoli": "broccoli",
+    "cauliflower": "blomkål",
+    "spinach": "spinat",
+    "mushroom": "champignon",
+    "corn": "majs",
+    "peas": "ærter",
+    "beans": "bønner",
+    "zucchini": "squash",
+    "eggplant": "aubergine",
+    "celery": "selleri",
+    "asparagus": "asparges",
+    "ginger": "ingefær",
+    "parsley": "persille",
+    "basil": "basilikum",
+    "mint": "mynte",
+    "cilantro": "koriander",
+}
 
 
 BASE_URL = "https://www.nemlig.com"
@@ -1799,6 +1877,368 @@ def cmd_import_setup() -> int:
     return 0
 
 
+# ============================================================================
+# Fridge Scanner (Raspberry Pi AI Camera)
+# ============================================================================
+
+def lookup_barcode(barcode: str) -> dict | None:
+    """Look up product info from barcode using OpenFoodFacts."""
+    if not SCANNER_AVAILABLE:
+        return None
+
+    try:
+        api = openfoodfacts.API(user_agent="NemligCLI/1.0")
+        product = api.product.get(barcode, fields=["code", "product_name", "brands", "quantity", "categories_tags"])
+
+        if product and product.get("product_name"):
+            return {
+                "barcode": barcode,
+                "name": product.get("product_name", "Unknown"),
+                "brand": product.get("brands", ""),
+                "quantity": product.get("quantity", ""),
+                "categories": product.get("categories_tags", []),
+                "source": "openfoodfacts"
+            }
+    except Exception:
+        pass
+
+    return None
+
+
+def scan_barcodes_from_image(image) -> list[str]:
+    """Detect and decode barcodes from an image using pyzbar."""
+    if not SCANNER_AVAILABLE:
+        return []
+
+    # Convert to grayscale for better detection
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+
+    # Decode barcodes
+    barcodes = pyzbar.decode(gray)
+    return [barcode.data.decode("utf-8") for barcode in barcodes]
+
+
+def detect_produce_from_image(image, imx500=None) -> list[dict]:
+    """Detect fruits/vegetables using YOLO on IMX500 or fallback to basic detection."""
+    detected = []
+
+    if PICAMERA_AVAILABLE and imx500:
+        # Use IMX500 AI accelerator for object detection
+        try:
+            # Get detections from IMX500 (assumes YOLO model loaded)
+            detections = imx500.get_outputs()
+            if detections:
+                for det in detections:
+                    label = det.get("label", "").lower()
+                    confidence = det.get("confidence", 0)
+
+                    if confidence > 0.5 and label in PRODUCE_LABELS:
+                        detected.append({
+                            "name": PRODUCE_LABELS.get(label, label),
+                            "name_en": label,
+                            "confidence": confidence,
+                            "source": "imx500_yolo"
+                        })
+        except Exception:
+            pass
+
+    # Fallback: Use color-based detection for common produce
+    # This is a simplified approach - real implementation would use a proper model
+    if not detected and SCANNER_AVAILABLE:
+        try:
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+            # Detect yellow (banana, lemon)
+            yellow_mask = cv2.inRange(hsv, (20, 100, 100), (35, 255, 255))
+            if cv2.countNonZero(yellow_mask) > 5000:
+                detected.append({"name": "banan/citron", "name_en": "banana/lemon", "confidence": 0.3, "source": "color"})
+
+            # Detect orange
+            orange_mask = cv2.inRange(hsv, (10, 100, 100), (20, 255, 255))
+            if cv2.countNonZero(orange_mask) > 5000:
+                detected.append({"name": "appelsin", "name_en": "orange", "confidence": 0.3, "source": "color"})
+
+            # Detect red (apple, tomato, pepper)
+            red_mask1 = cv2.inRange(hsv, (0, 100, 100), (10, 255, 255))
+            red_mask2 = cv2.inRange(hsv, (160, 100, 100), (180, 255, 255))
+            red_mask = cv2.bitwise_or(red_mask1, red_mask2)
+            if cv2.countNonZero(red_mask) > 5000:
+                detected.append({"name": "æble/tomat", "name_en": "apple/tomato", "confidence": 0.3, "source": "color"})
+
+            # Detect green (cucumber, lettuce, broccoli)
+            green_mask = cv2.inRange(hsv, (35, 50, 50), (85, 255, 255))
+            if cv2.countNonZero(green_mask) > 5000:
+                detected.append({"name": "grøntsag", "name_en": "vegetable", "confidence": 0.3, "source": "color"})
+
+        except Exception:
+            pass
+
+    return detected
+
+
+def run_fridge_scanner(auth: AuthTokens | None = None) -> int:
+    """Run the fridge scanner to inventory items."""
+    print("\n  📷 Fridge Scanner")
+    print("  ─────────────────────────────────────────────────────")
+
+    if not SCANNER_AVAILABLE:
+        print("\n  Error: Scanner libraries not installed.")
+        print("  Run: uv add pyzbar opencv-python Pillow openfoodfacts")
+        return 1
+
+    # Check for Raspberry Pi AI Camera
+    imx500 = None
+    picam2 = None
+    use_webcam = True
+
+    if PICAMERA_AVAILABLE:
+        try:
+            print("  Detected Raspberry Pi - initializing AI Camera...")
+            picam2 = Picamera2()
+
+            # Try to load YOLO model for produce detection
+            try:
+                imx500 = IMX500("/usr/share/imx500-models/imx500_network_yolov8n_pp.rpk")
+                print("  ✓ YOLO model loaded on IMX500")
+            except Exception:
+                print("  ⚠ YOLO model not available, using basic detection")
+
+            picam2.configure(picam2.create_preview_configuration())
+            picam2.start()
+            use_webcam = False
+            print("  ✓ Raspberry Pi AI Camera ready")
+        except Exception as e:
+            print(f"  ⚠ Could not initialize Pi Camera: {e}")
+            print("  Falling back to webcam...")
+            use_webcam = True
+
+    if use_webcam:
+        try:
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                print("\n  Error: No camera available.")
+                print("  Connect a webcam or run on Raspberry Pi with AI Camera.")
+                return 1
+            print("  ✓ Webcam ready")
+        except Exception as e:
+            print(f"\n  Error initializing camera: {e}")
+            return 1
+
+    print("\n  Instructions:")
+    print("  - Point camera at items in your fridge")
+    print("  - Barcodes will be scanned automatically")
+    print("  - Fruits/vegetables will be detected by AI")
+    print("  - Press 'a' to add detected item to inventory")
+    print("  - Press 's' to suggest items to buy")
+    print("  - Press 'q' to quit")
+    print("  ─────────────────────────────────────────────────────\n")
+
+    inventory = load_fridge_inventory()
+    scanned_barcodes = set()
+    detected_items = []
+    last_detection_time = 0
+
+    try:
+        while True:
+            # Capture frame
+            if use_webcam:
+                ret, frame = cap.read()
+                if not ret:
+                    continue
+            else:
+                frame = picam2.capture_array()
+
+            current_time = time.time()
+
+            # Scan barcodes
+            barcodes = scan_barcodes_from_image(frame)
+            for barcode in barcodes:
+                if barcode not in scanned_barcodes:
+                    scanned_barcodes.add(barcode)
+                    print(f"  🔍 Barcode detected: {barcode}")
+
+                    product = lookup_barcode(barcode)
+                    if product:
+                        print(f"     ✓ Found: {product['name']} ({product['brand']})")
+                        detected_items.append(product)
+
+                        # Auto-add to inventory
+                        existing = next((i for i in inventory["items"] if i.get("barcode") == barcode), None)
+                        if existing:
+                            existing["count"] = existing.get("count", 1) + 1
+                            print(f"     Updated count: {existing['count']}")
+                        else:
+                            inventory["items"].append({
+                                "barcode": barcode,
+                                "name": product["name"],
+                                "brand": product.get("brand", ""),
+                                "count": 1,
+                                "added": time.strftime("%Y-%m-%d %H:%M"),
+                                "source": "barcode"
+                            })
+                            print(f"     Added to inventory!")
+                        save_fridge_inventory(inventory)
+                    else:
+                        print(f"     ⚠ Product not found in database")
+
+            # Detect produce (throttle to every 2 seconds)
+            if current_time - last_detection_time > 2:
+                produce = detect_produce_from_image(frame, imx500)
+                for item in produce:
+                    if item["confidence"] > 0.5:
+                        print(f"  🥬 Detected: {item['name']} (confidence: {item['confidence']:.0%})")
+                last_detection_time = current_time
+
+            # Show frame with overlays
+            display = frame.copy()
+
+            # Draw barcode boxes
+            if SCANNER_AVAILABLE:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
+                for barcode in pyzbar.decode(gray):
+                    pts = barcode.polygon
+                    if pts:
+                        pts = [(p.x, p.y) for p in pts]
+                        cv2.polylines(display, [cv2.convexHull(cv2.array(pts, dtype="int32").reshape((-1, 1, 2)))], True, (0, 255, 0), 2)
+
+            # Show inventory count
+            cv2.putText(display, f"Inventory: {len(inventory['items'])} items", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(display, "Press 'q' to quit, 's' to suggest shopping", (10, 60),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+            cv2.imshow("Fridge Scanner", display)
+
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                break
+            elif key == ord('s'):
+                # Suggest items to buy based on what's running low
+                print("\n  📋 Suggested items to add to grocery list:")
+                for item in inventory["items"]:
+                    if item.get("count", 1) <= 1:
+                        print(f"     - {item['name']} (running low)")
+                print()
+
+    except KeyboardInterrupt:
+        print("\n  Stopped scanning.")
+    finally:
+        if use_webcam:
+            cap.release()
+        elif picam2:
+            picam2.stop()
+        cv2.destroyAllWindows()
+
+    # Update last scan time
+    inventory["last_scan"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    save_fridge_inventory(inventory)
+
+    print(f"\n  ✓ Inventory saved: {len(inventory['items'])} items")
+    return 0
+
+
+def cmd_fridge_show() -> int:
+    """Show current fridge inventory."""
+    inventory = load_fridge_inventory()
+
+    print("\n  🧊 Fridge Inventory")
+    print("  ─────────────────────────────────────────────────────")
+
+    if not inventory["items"]:
+        print("  Your fridge inventory is empty.")
+        print("  Run 'scan' to start scanning items.")
+        return 0
+
+    print(f"  Last scan: {inventory.get('last_scan', 'Never')}")
+    print(f"  Total items: {len(inventory['items'])}\n")
+
+    for item in inventory["items"]:
+        name = item.get("name", "Unknown")
+        brand = item.get("brand", "")
+        count = item.get("count", 1)
+        added = item.get("added", "")
+        source = item.get("source", "")
+
+        brand_str = f" ({brand})" if brand else ""
+        print(f"  • {name}{brand_str} x{count}")
+        if added:
+            print(f"    Added: {added} [{source}]")
+
+    print("  ─────────────────────────────────────────────────────\n")
+    return 0
+
+
+def cmd_fridge_clear() -> int:
+    """Clear fridge inventory."""
+    inventory = load_fridge_inventory()
+    count = len(inventory["items"])
+    inventory["items"] = []
+    save_fridge_inventory(inventory)
+    print(f"  Cleared {count} items from fridge inventory.")
+    return 0
+
+
+def cmd_fridge_suggest(auth: AuthTokens) -> int:
+    """Suggest grocery items based on fridge contents using AI."""
+    if not ANTHROPIC_AVAILABLE:
+        print("  Error: Anthropic not available for AI suggestions.")
+        return 1
+
+    api_key = get_anthropic_api_key()
+    if not api_key:
+        print("  Error: ANTHROPIC_API_KEY not configured.")
+        return 1
+
+    inventory = load_fridge_inventory()
+    grocery_list = load_grocery_list()
+
+    if not inventory["items"]:
+        print("  Fridge inventory is empty. Run 'scan' first.")
+        return 1
+
+    # Build context
+    fridge_items = ", ".join(item["name"] for item in inventory["items"])
+    list_items = ", ".join(item["name"] for item in grocery_list["items"]) if grocery_list["items"] else "empty"
+
+    print("\n  🤖 Analyzing fridge contents and suggesting items...\n")
+
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": f"""Based on my fridge contents and current grocery list, suggest what I should buy.
+
+Fridge contents: {fridge_items}
+Current grocery list: {list_items}
+Budget: {grocery_list['budget']:.2f} kr
+
+Please suggest:
+1. Items that would complement what I have (for complete meals)
+2. Staples that might be running low
+3. Fresh items that need regular replenishment
+
+Keep suggestions practical for a Danish grocery store (nemlig.com).
+Format as a simple bullet list with item names in Danish."""
+        }],
+        system="You are a helpful Danish grocery shopping assistant. Give practical, concise suggestions."
+    )
+
+    print("  Suggestions based on your fridge:")
+    print("  ─────────────────────────────────────────────────────")
+    for block in response.content:
+        if hasattr(block, "text"):
+            for line in block.text.split("\n"):
+                print(f"  {line}")
+    print("  ─────────────────────────────────────────────────────\n")
+
+    return 0
+
+
 def interactive_mode(auth: AuthTokens, username: str) -> int:
     """Run interactive REPL mode."""
     print_welcome(username)
@@ -1838,6 +2278,10 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
     basket              Show nemlig basket
     plan                🤖 AI meal planner (interactive chat)
     import              📋 Import recipes from Google Form
+    scan                📷 Scan fridge with camera
+    fridge              🧊 View fridge inventory
+    fridge suggest      🤖 AI suggestions based on fridge
+    fridge clear        Clear fridge inventory
     help                Show this help
     quit                Exit
     ─────────────────────────────────────────────────────
@@ -1848,6 +2292,21 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
 
         elif command == "import":
             process_form_recipes(auth)
+
+        elif command == "scan":
+            run_fridge_scanner(auth)
+
+        elif command == "fridge":
+            if len(parts) > 1:
+                subcmd = parts[1].lower()
+                if subcmd == "clear":
+                    cmd_fridge_clear()
+                elif subcmd == "suggest":
+                    cmd_fridge_suggest(auth)
+                else:
+                    cmd_fridge_show()
+            else:
+                cmd_fridge_show()
 
         elif command == "search" and len(parts) > 1:
             query = " ".join(parts[1:])
@@ -2109,6 +2568,16 @@ Examples:
     import_parser.add_argument("spreadsheet_id", nargs="?", help="Google Spreadsheet ID (from URL)")
     import_parser.add_argument("--setup", action="store_true", help="Run interactive setup")
 
+    # Scan command (fridge camera scanner)
+    subparsers.add_parser("scan", help="📷 Scan fridge with camera (barcode + AI detection)")
+
+    # Fridge command (inventory management)
+    fridge_parser = subparsers.add_parser("fridge", help="🧊 Manage fridge inventory")
+    fridge_sub = fridge_parser.add_subparsers(dest="fridge_cmd")
+    fridge_sub.add_parser("show", help="Show fridge inventory (default)")
+    fridge_sub.add_parser("clear", help="Clear fridge inventory")
+    fridge_sub.add_parser("suggest", help="AI suggestions based on fridge contents")
+
     args = parser.parse_args()
 
     # Handle list commands that don't require authentication
@@ -2128,6 +2597,15 @@ Examples:
     # Handle import --setup (no auth needed)
     if args.command == "import" and args.setup:
         return cmd_import_setup()
+
+    # Handle fridge commands that don't need auth
+    if args.command == "fridge":
+        fridge_cmd = args.fridge_cmd
+        if fridge_cmd is None or fridge_cmd == "show":
+            return cmd_fridge_show()
+        elif fridge_cmd == "clear":
+            return cmd_fridge_clear()
+        # suggest needs auth, falls through
 
     # Load credentials: config file first, CLI overrides
     try:
@@ -2192,6 +2670,12 @@ Examples:
             return meal_plan_chat(auth)
         elif args.command == "import":
             return process_form_recipes(auth, args.spreadsheet_id)
+        elif args.command == "scan":
+            return run_fridge_scanner(auth)
+        elif args.command == "fridge":
+            # Only suggest needs auth (show/clear handled above)
+            if args.fridge_cmd == "suggest":
+                return cmd_fridge_suggest(auth)
         else:
             print(f"Unknown command: {args.command}", file=sys.stderr)
             return 1
