@@ -16,6 +16,7 @@ CLI options override the config file.
 import argparse
 import itertools
 import json
+import os
 import re
 import sys
 import threading
@@ -25,6 +26,25 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import requests
+
+# Optional: Anthropic for AI meal planning
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
+# Optional: Google Sheets for form responses
+try:
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.auth.transport.requests import Request
+    from googleapiclient.discovery import build
+    GSHEETS_AVAILABLE = True
+except ImportError:
+    GSHEETS_AVAILABLE = False
+
+GSHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 
 class Spinner:
@@ -126,7 +146,81 @@ def load_config_credentials() -> dict:
     return {
         "username": data.get("username"),
         "password": data.get("password"),
+        "anthropic_api_key": data.get("anthropic_api_key"),
     }
+
+
+def get_anthropic_api_key() -> str | None:
+    """Get Anthropic API key from config file or environment."""
+    # Try environment first
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if api_key:
+        return api_key
+
+    # Try config file
+    try:
+        creds = load_config_credentials()
+        return creds.get("anthropic_api_key")
+    except Exception:
+        return None
+
+
+# Google Sheets config
+GSHEETS_CONFIG_FILE = Path.home() / ".config" / "nemlig" / "gsheets.json"
+GSHEETS_TOKEN_FILE = Path.home() / ".config" / "nemlig" / "gsheets_token.json"
+GSHEETS_CREDENTIALS_FILE = Path.home() / ".config" / "nemlig" / "credentials.json"
+
+
+def load_gsheets_config() -> dict:
+    """Load Google Sheets configuration."""
+    if GSHEETS_CONFIG_FILE.exists():
+        return json.loads(GSHEETS_CONFIG_FILE.read_text())
+    return {}
+
+
+def save_gsheets_config(config: dict) -> None:
+    """Save Google Sheets configuration."""
+    GSHEETS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    GSHEETS_CONFIG_FILE.write_text(json.dumps(config, indent=2))
+
+
+def get_gsheets_service():
+    """Get authenticated Google Sheets service."""
+    if not GSHEETS_AVAILABLE:
+        raise RuntimeError("Google Sheets libraries not installed. Run: uv add google-api-python-client google-auth-oauthlib")
+
+    creds = None
+
+    # Load existing token
+    if GSHEETS_TOKEN_FILE.exists():
+        creds = Credentials.from_authorized_user_file(str(GSHEETS_TOKEN_FILE), GSHEETS_SCOPES)
+
+    # Refresh or get new credentials
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not GSHEETS_CREDENTIALS_FILE.exists():
+                raise FileNotFoundError(
+                    f"Google credentials file not found at {GSHEETS_CREDENTIALS_FILE}\n"
+                    "Download from Google Cloud Console: APIs & Services > Credentials > OAuth 2.0 Client IDs"
+                )
+            flow = InstalledAppFlow.from_client_secrets_file(str(GSHEETS_CREDENTIALS_FILE), GSHEETS_SCOPES)
+            creds = flow.run_local_server(port=0)
+
+        # Save token for next time
+        GSHEETS_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        GSHEETS_TOKEN_FILE.write_text(creds.to_json())
+
+    return build("sheets", "v4", credentials=creds)
+
+
+def fetch_sheet_data(spreadsheet_id: str, range_name: str = "A:Z") -> list[list[str]]:
+    """Fetch data from a Google Sheet."""
+    service = get_gsheets_service()
+    sheet = service.spreadsheets()
+    result = sheet.values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
+    return result.get("values", [])
 
 
 LIST_FILE = Path.home() / ".config" / "nemlig" / "grocery_list.json"
@@ -550,10 +644,24 @@ def format_list_summary(items: list, budget: float) -> str:
     # Budget bar visualization
     if budget > 0:
         bar_width = 30
-        filled = min(int((total / budget) * bar_width), bar_width)
-        bar = "█" * filled + "░" * (bar_width - filled)
         pct = (total / budget) * 100
-        status = "OVER BUDGET!" if pct > 100 else f"{pct:.0f}%"
+        filled = min(int((total / budget) * bar_width), bar_width)
+        empty = bar_width - filled
+
+        # Color coding: green (<70%), yellow (70-90%), red (>90%)
+        if pct > 100:
+            bar = "\033[91m" + "█" * bar_width + "\033[0m"  # Red, overfilled
+            status = "\033[91mOVER BUDGET!\033[0m"
+        elif pct > 90:
+            bar = "\033[91m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"  # Red
+            status = f"\033[91m{pct:.0f}%\033[0m"
+        elif pct > 70:
+            bar = "\033[93m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"  # Yellow
+            status = f"\033[93m{pct:.0f}%\033[0m"
+        else:
+            bar = "\033[92m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"  # Green
+            status = f"\033[92m{pct:.0f}%\033[0m"
+
         lines.append(f"\n  [{bar}] {status}")
 
     return "\n".join(lines)
@@ -975,11 +1083,34 @@ def cmd_list_budget(args: argparse.Namespace) -> int:
         save_grocery_list(data)
         print(f"Budget set to {args.amount:.2f} kr")
     else:
-        print(f"Current budget: {data['budget']:.2f} kr")
+        budget = data["budget"]
         total = sum(item.get("unit_price", 0) * item.get("quantity", 1) for item in data["items"])
-        remaining = data["budget"] - total
+        remaining = budget - total
+        print(f"Current budget: {budget:.2f} kr")
         print(f"List total:     {total:.2f} kr")
         print(f"Remaining:      {remaining:.2f} kr")
+
+        # Progress bar
+        if budget > 0:
+            bar_width = 30
+            pct = (total / budget) * 100
+            filled = min(int((total / budget) * bar_width), bar_width)
+            empty = bar_width - filled
+
+            if pct > 100:
+                bar = "\033[91m" + "█" * bar_width + "\033[0m"
+                status = "\033[91mOVER BUDGET!\033[0m"
+            elif pct > 90:
+                bar = "\033[91m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"
+                status = f"\033[91m{pct:.0f}%\033[0m"
+            elif pct > 70:
+                bar = "\033[93m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"
+                status = f"\033[93m{pct:.0f}%\033[0m"
+            else:
+                bar = "\033[92m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"
+                status = f"\033[92m{pct:.0f}%\033[0m"
+
+            print(f"\n[{bar}] {status}")
 
     return 0
 
@@ -1013,12 +1144,667 @@ def cmd_list_sync(auth: AuthTokens, args: argparse.Namespace) -> int:
     return 0 if success_count == len(data["items"]) else 1
 
 
+# ============================================================================
+# AI Meal Planning
+# ============================================================================
+
+MEAL_PLAN_TOOLS = [
+    {
+        "name": "search_products",
+        "description": "Search for grocery products on nemlig.com. Returns a list of products with their IDs, names, prices, and availability.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search term (e.g., 'mælk', 'hakket oksekød', 'pasta')"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return (default: 5)",
+                    "default": 5
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "add_to_grocery_list",
+        "description": "Add a product to the grocery list by its product ID. Use search_products first to find the product ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product_id": {
+                    "type": "string",
+                    "description": "The product ID from search results"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "description": "Number of items to add (default: 1)",
+                    "default": 1
+                }
+            },
+            "required": ["product_id"]
+        }
+    },
+    {
+        "name": "view_grocery_list",
+        "description": "View the current grocery list with all items, quantities, and budget status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "remove_from_grocery_list",
+        "description": "Remove a product from the grocery list by its product ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product_id": {
+                    "type": "string",
+                    "description": "The product ID to remove"
+                }
+            },
+            "required": ["product_id"]
+        }
+    },
+    {
+        "name": "set_budget",
+        "description": "Set the budget limit for the grocery list in Danish kroner (kr).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "description": "Budget amount in kr"
+                }
+            },
+            "required": ["amount"]
+        }
+    },
+    {
+        "name": "clear_grocery_list",
+        "description": "Clear all items from the grocery list. Use with caution.",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    }
+]
+
+
+def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -> str:
+    """Execute a meal planning tool and return the result as a string."""
+    try:
+        if tool_name == "search_products":
+            query = tool_input["query"]
+            limit = tool_input.get("limit", 5)
+            products = search_products(auth, query, limit=limit)
+
+            if not products:
+                return f"No products found for '{query}'"
+
+            results = []
+            for p in products:
+                pid = p.get("Id", "")
+                name = p.get("Name", "Unknown")
+                brand = p.get("Brand", "")
+                price = p.get("Price", 0)
+                unit_price = p.get("UnitPrice", "")
+                available = p.get("Availability", {}).get("IsAvailableInStock", False)
+                stock = "In stock" if available else "OUT OF STOCK"
+
+                results.append(
+                    f"- ID: {pid} | {name} ({brand}) | {price:.2f} kr | {unit_price} | {stock}"
+                )
+
+            return f"Found {len(products)} products for '{query}':\n" + "\n".join(results)
+
+        elif tool_name == "add_to_grocery_list":
+            product_id = str(tool_input["product_id"])
+            quantity = tool_input.get("quantity", 1)
+
+            # Fetch product details
+            try:
+                product = get_product_details(auth, product_id)
+            except ProductNotFoundError as e:
+                return f"Error: {e}"
+
+            data = load_grocery_list()
+
+            # Check if already in list
+            for item in data["items"]:
+                if str(item["product_id"]) == product_id:
+                    item["quantity"] += quantity
+                    save_grocery_list(data)
+                    return f"Updated quantity: {item['name']} x{item['quantity']} (was x{item['quantity'] - quantity})"
+
+            # Add new item
+            new_item = {
+                "product_id": product_id,
+                "name": product.get("Name", "Unknown"),
+                "brand": product.get("Brand", ""),
+                "unit_price": product.get("Price", 0),
+                "quantity": quantity,
+            }
+            data["items"].append(new_item)
+            save_grocery_list(data)
+
+            total = sum(i["unit_price"] * i["quantity"] for i in data["items"])
+            return f"Added: {new_item['name']} x{quantity} ({new_item['unit_price']:.2f} kr each)\nList total: {total:.2f} kr / Budget: {data['budget']:.2f} kr"
+
+        elif tool_name == "view_grocery_list":
+            data = load_grocery_list()
+            if not data["items"]:
+                return f"Grocery list is empty. Budget: {data['budget']:.2f} kr"
+
+            lines = [f"Grocery List ({len(data['items'])} items):"]
+            total = 0
+            for item in data["items"]:
+                subtotal = item["unit_price"] * item["quantity"]
+                total += subtotal
+                lines.append(f"- [{item['product_id']}] {item['name']} x{item['quantity']} = {subtotal:.2f} kr")
+
+            lines.append(f"\nSubtotal: {total:.2f} kr")
+            lines.append(f"Budget: {data['budget']:.2f} kr")
+            lines.append(f"Remaining: {data['budget'] - total:.2f} kr")
+
+            pct = (total / data['budget'] * 100) if data['budget'] > 0 else 0
+            lines.append(f"Budget used: {pct:.0f}%")
+
+            return "\n".join(lines)
+
+        elif tool_name == "remove_from_grocery_list":
+            product_id = str(tool_input["product_id"])
+            data = load_grocery_list()
+
+            for i, item in enumerate(data["items"]):
+                if str(item["product_id"]) == product_id:
+                    removed = data["items"].pop(i)
+                    save_grocery_list(data)
+                    return f"Removed: {removed['name']} x{removed['quantity']}"
+
+            return f"Product {product_id} not found in grocery list"
+
+        elif tool_name == "set_budget":
+            amount = float(tool_input["amount"])
+            data = load_grocery_list()
+            data["budget"] = amount
+            save_grocery_list(data)
+            return f"Budget set to {amount:.2f} kr"
+
+        elif tool_name == "clear_grocery_list":
+            data = load_grocery_list()
+            count = len(data["items"])
+            data["items"] = []
+            save_grocery_list(data)
+            return f"Cleared {count} items from grocery list"
+
+        else:
+            return f"Unknown tool: {tool_name}"
+
+    except Exception as e:
+        return f"Error executing {tool_name}: {e}"
+
+
+MEAL_PLAN_SYSTEM_PROMPT = """You are a helpful Danish grocery shopping assistant for nemlig.com. You help users plan their meals for the week and build a grocery list.
+
+Your capabilities:
+- Search for products on nemlig.com
+- Add products to the user's grocery list
+- View and manage the grocery list
+- Set a budget and help users stay within it
+
+Guidelines:
+- Always search for products before adding them to understand what's available
+- Consider the user's budget when making suggestions
+- Prioritize essential ingredients for recipes over nice-to-haves
+- When the user mentions a recipe or meal, think about all ingredients needed
+- Products are priced in Danish kroner (kr)
+- Be concise but helpful in your responses
+- If a product isn't available, suggest alternatives
+- When adding multiple items, add them one at a time to ensure accuracy
+
+When the user describes meals or recipes they want to make:
+1. First, understand all the ingredients needed
+2. Search for each ingredient to find the best options
+3. Consider price and availability
+4. Add items to the list, prioritizing by importance to the recipes
+5. Keep track of the budget and warn if getting close to the limit"""
+
+
+def meal_plan_chat(auth: AuthTokens) -> int:
+    """Run the AI meal planning chat interface."""
+    if not ANTHROPIC_AVAILABLE:
+        print("\n  Error: anthropic package not installed.")
+        print("  Run: uv add anthropic")
+        return 1
+
+    api_key = get_anthropic_api_key()
+    if not api_key:
+        print("\n  Error: ANTHROPIC_API_KEY not found.")
+        print("  Set it in ~/.config/nemlig/login.json or as environment variable.")
+        print('  Example: {"username": "...", "password": "...", "anthropic_api_key": "sk-ant-..."}')
+        return 1
+
+    client = anthropic.Anthropic(api_key=api_key)
+    messages = []
+
+    print("\n  🍽️  AI Meal Planner")
+    print("  ─────────────────────────────────────────────────────")
+    print("  Tell me what meals you want to make this week, and I'll")
+    print("  help you build a grocery list within your budget.")
+    print()
+    print("  Examples:")
+    print("    'I want to make spaghetti bolognese and a chicken salad'")
+    print("    'Set my budget to 500 kr'")
+    print("    'What's on my list so far?'")
+    print()
+    print("  Type 'done' to exit meal planning.")
+    print("  ─────────────────────────────────────────────────────\n")
+
+    # Show current list status
+    data = load_grocery_list()
+    total = sum(i["unit_price"] * i["quantity"] for i in data["items"])
+    print(f"  Current list: {len(data['items'])} items | {total:.2f} kr / {data['budget']:.2f} kr budget\n")
+
+    while True:
+        try:
+            user_input = input("  you> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n  Exiting meal planner.\n")
+            return 0
+
+        if not user_input:
+            continue
+
+        if user_input.lower() in ("done", "exit", "quit", "q"):
+            print("\n  Exiting meal planner.\n")
+            return 0
+
+        messages.append({"role": "user", "content": user_input})
+
+        # Show thinking indicator
+        spinner = Spinner("Thinking")
+        spinner.start()
+
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                system=MEAL_PLAN_SYSTEM_PROMPT,
+                tools=MEAL_PLAN_TOOLS,
+                messages=messages
+            )
+        except Exception as e:
+            spinner.stop("Error")
+            print(f"\n  Error: {e}\n")
+            messages.pop()  # Remove failed message
+            continue
+
+        spinner.stop("")
+
+        # Process response
+        while response.stop_reason == "tool_use":
+            # Handle tool calls
+            assistant_content = response.content
+            messages.append({"role": "assistant", "content": assistant_content})
+
+            tool_results = []
+            for block in assistant_content:
+                if block.type == "tool_use":
+                    tool_name = block.name
+                    tool_input = block.input
+                    tool_id = block.id
+
+                    print(f"  \033[90m[{tool_name}: {json.dumps(tool_input, ensure_ascii=False)}]\033[0m")
+
+                    result = execute_meal_plan_tool(auth, tool_name, tool_input)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": result
+                    })
+
+            messages.append({"role": "user", "content": tool_results})
+
+            # Continue conversation
+            spinner = Spinner("Processing")
+            spinner.start()
+            try:
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=4096,
+                    system=MEAL_PLAN_SYSTEM_PROMPT,
+                    tools=MEAL_PLAN_TOOLS,
+                    messages=messages
+                )
+            except Exception as e:
+                spinner.stop("Error")
+                print(f"\n  Error: {e}\n")
+                break
+            spinner.stop("")
+
+        # Print final text response
+        for block in response.content:
+            if hasattr(block, "text"):
+                # Indent the response
+                text = block.text
+                indented = "\n".join(f"  {line}" for line in text.split("\n"))
+                print(f"\n  \033[96m🤖\033[0m{indented[2:]}\n")
+
+        messages.append({"role": "assistant", "content": response.content})
+
+    return 0
+
+
+# ============================================================================
+# Google Form / Recipe Import
+# ============================================================================
+
+RECIPE_EXTRACT_PROMPT = """You are a grocery shopping assistant. Given a list of meals or recipes that someone wants to make, extract ALL the ingredients needed.
+
+For each ingredient:
+1. Identify the ingredient name in Danish (translate if needed for nemlig.com)
+2. Estimate the quantity needed
+3. Prioritize by importance (essential ingredients first, optional garnishes last)
+
+Output your response as a JSON array of ingredients:
+[
+  {"ingredient": "hakket oksekød", "quantity": 500, "unit": "g", "priority": 1, "for_recipe": "Spaghetti Bolognese"},
+  {"ingredient": "spaghetti", "quantity": 500, "unit": "g", "priority": 1, "for_recipe": "Spaghetti Bolognese"},
+  ...
+]
+
+Be thorough - include all ingredients mentioned in recipes. Use Danish names for products when possible as this is for a Danish grocery store."""
+
+
+def extract_ingredients_from_recipes(recipes_text: str) -> list[dict]:
+    """Use Claude to extract ingredients from recipe text."""
+    if not ANTHROPIC_AVAILABLE:
+        raise RuntimeError("anthropic package not installed")
+
+    api_key = get_anthropic_api_key()
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=4096,
+        messages=[
+            {
+                "role": "user",
+                "content": f"Extract all ingredients from these meal plans/recipes:\n\n{recipes_text}\n\nRespond with ONLY a JSON array, no other text."
+            }
+        ],
+        system=RECIPE_EXTRACT_PROMPT
+    )
+
+    # Parse JSON from response
+    response_text = response.content[0].text.strip()
+
+    # Handle markdown code blocks
+    if response_text.startswith("```"):
+        lines = response_text.split("\n")
+        response_text = "\n".join(lines[1:-1])
+
+    return json.loads(response_text)
+
+
+def process_form_recipes(auth: AuthTokens, spreadsheet_id: str | None = None) -> int:
+    """Fetch recipes from Google Form responses and build grocery list."""
+    print("\n  📋 Recipe Import from Google Form")
+    print("  ─────────────────────────────────────────────────────\n")
+
+    # Get spreadsheet ID
+    config = load_gsheets_config()
+    if spreadsheet_id:
+        config["spreadsheet_id"] = spreadsheet_id
+        save_gsheets_config(config)
+    elif not config.get("spreadsheet_id"):
+        print("  No spreadsheet ID configured.")
+        print("  Usage: nemlig_cli.py import <SPREADSHEET_ID>")
+        print("  Or: nemlig_cli.py import --setup")
+        return 1
+
+    sheet_id = config.get("spreadsheet_id", spreadsheet_id)
+
+    # Fetch data from sheet
+    print(f"  Fetching data from Google Sheet...")
+    spinner = Spinner("Connecting to Google Sheets")
+    spinner.start()
+
+    try:
+        rows = fetch_sheet_data(sheet_id)
+    except FileNotFoundError as e:
+        spinner.stop("Error")
+        print(f"\n  {e}")
+        return 1
+    except Exception as e:
+        spinner.stop("Error")
+        print(f"\n  Error fetching sheet: {e}")
+        return 1
+
+    spinner.stop(f"Found {len(rows)} rows")
+
+    if not rows:
+        print("  No data in spreadsheet.")
+        return 1
+
+    # Assume first row is headers
+    headers = rows[0] if rows else []
+    data_rows = rows[1:] if len(rows) > 1 else []
+
+    print(f"  Headers: {headers}")
+    print(f"  Data rows: {len(data_rows)}\n")
+
+    if not data_rows:
+        print("  No form responses yet.")
+        return 0
+
+    # Combine all recipe text from form responses
+    recipes_text = ""
+    for i, row in enumerate(data_rows, 1):
+        # Skip timestamp column (usually first), combine rest
+        recipe_data = " | ".join(row[1:]) if len(row) > 1 else row[0] if row else ""
+        if recipe_data.strip():
+            recipes_text += f"\nSubmission {i}:\n{recipe_data}\n"
+
+    if not recipes_text.strip():
+        print("  No recipe data found in form responses.")
+        return 0
+
+    print("  Form responses:")
+    print("  " + "-" * 50)
+    for line in recipes_text.strip().split("\n"):
+        print(f"  {line}")
+    print("  " + "-" * 50)
+
+    # Extract ingredients using LLM
+    print("\n  Analyzing recipes with AI...")
+    spinner = Spinner("Extracting ingredients")
+    spinner.start()
+
+    try:
+        ingredients = extract_ingredients_from_recipes(recipes_text)
+    except json.JSONDecodeError as e:
+        spinner.stop("Error parsing AI response")
+        print(f"\n  Could not parse ingredients: {e}")
+        return 1
+    except Exception as e:
+        spinner.stop("Error")
+        print(f"\n  Error extracting ingredients: {e}")
+        return 1
+
+    spinner.stop(f"Found {len(ingredients)} ingredients")
+
+    if not ingredients:
+        print("  No ingredients extracted.")
+        return 0
+
+    # Show extracted ingredients
+    print("\n  Extracted ingredients:")
+    print("  " + "-" * 50)
+    for ing in ingredients:
+        qty = ing.get("quantity", "")
+        unit = ing.get("unit", "")
+        name = ing.get("ingredient", "")
+        recipe = ing.get("for_recipe", "")
+        print(f"  • {name} ({qty}{unit}) - for {recipe}")
+    print("  " + "-" * 50)
+
+    # Confirm with user
+    print(f"\n  Ready to search and add {len(ingredients)} ingredients to your grocery list.")
+    try:
+        confirm = input("  Proceed? [Y/n]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  Cancelled.")
+        return 0
+
+    if confirm and confirm != "y":
+        print("  Cancelled.")
+        return 0
+
+    # Search and add each ingredient
+    print("\n  Adding ingredients to grocery list...\n")
+    added = 0
+    failed = []
+
+    for ing in ingredients:
+        name = ing.get("ingredient", "")
+        qty = ing.get("quantity", 1)
+
+        # Determine quantity to add (default to 1 item)
+        add_qty = 1
+        if isinstance(qty, (int, float)) and qty > 0:
+            # Rough conversion: if unit is 'g' or 'ml' and qty > 100, still add 1 package
+            add_qty = 1
+
+        spinner = Spinner(f"Searching: {name}")
+        spinner.start()
+
+        try:
+            products = search_products(auth, name, limit=3)
+
+            if not products:
+                spinner.stop(f"✗ Not found: {name}")
+                failed.append(name)
+                continue
+
+            # Pick first available product
+            product = None
+            for p in products:
+                if p.get("Availability", {}).get("IsAvailableInStock", False):
+                    product = p
+                    break
+
+            if not product:
+                product = products[0]  # Use first even if out of stock
+
+            product_id = str(product.get("Id"))
+            product_name = product.get("Name", name)
+            price = product.get("Price", 0)
+
+            # Add to grocery list
+            data = load_grocery_list()
+
+            # Check if already in list
+            existing = None
+            for item in data["items"]:
+                if str(item["product_id"]) == product_id:
+                    existing = item
+                    break
+
+            if existing:
+                existing["quantity"] += add_qty
+                spinner.stop(f"✓ Updated: {product_name} (now x{existing['quantity']})")
+            else:
+                new_item = {
+                    "product_id": product_id,
+                    "name": product_name,
+                    "brand": product.get("Brand", ""),
+                    "unit_price": price,
+                    "quantity": add_qty,
+                }
+                data["items"].append(new_item)
+                spinner.stop(f"✓ Added: {product_name} - {price:.2f} kr")
+
+            save_grocery_list(data)
+            added += 1
+
+        except Exception as e:
+            spinner.stop(f"✗ Error: {name} - {e}")
+            failed.append(name)
+
+    # Summary
+    print("\n  " + "=" * 50)
+    print(f"  ✓ Added {added} items to grocery list")
+    if failed:
+        print(f"  ✗ Failed to find: {', '.join(failed)}")
+
+    # Show list summary
+    data = load_grocery_list()
+    total = sum(i["unit_price"] * i["quantity"] for i in data["items"])
+    print(f"\n  List total: {total:.2f} kr / Budget: {data['budget']:.2f} kr")
+
+    if total > data["budget"]:
+        print(f"  \033[91m⚠ Over budget by {total - data['budget']:.2f} kr!\033[0m")
+
+    print("\n  Use 'list' to view full grocery list, 'list sync' to push to nemlig.\n")
+
+    return 0
+
+
+def cmd_import_setup() -> int:
+    """Interactive setup for Google Sheets import."""
+    print("\n  📋 Google Sheets Import Setup")
+    print("  ─────────────────────────────────────────────────────\n")
+
+    print("  Step 1: Google Cloud Setup")
+    print("  ─────────────────────────────────────────────────────")
+    print("  1. Go to https://console.cloud.google.com/")
+    print("  2. Create a new project or select existing")
+    print("  3. Enable 'Google Sheets API'")
+    print("  4. Go to APIs & Services > Credentials")
+    print("  5. Create OAuth 2.0 Client ID (Desktop app)")
+    print("  6. Download the credentials JSON file")
+    print(f"  7. Save it as: {GSHEETS_CREDENTIALS_FILE}")
+    print()
+
+    print("  Step 2: Spreadsheet ID")
+    print("  ─────────────────────────────────────────────────────")
+    print("  Your Google Form responses are saved to a linked spreadsheet.")
+    print("  The spreadsheet ID is in the URL:")
+    print("  https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit")
+    print()
+
+    try:
+        sheet_id = input("  Enter spreadsheet ID: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  Cancelled.")
+        return 0
+
+    if sheet_id:
+        config = load_gsheets_config()
+        config["spreadsheet_id"] = sheet_id
+        save_gsheets_config(config)
+        print(f"\n  ✓ Spreadsheet ID saved to {GSHEETS_CONFIG_FILE}")
+        print("  Run 'just import' to fetch and process recipes.")
+    else:
+        print("  No spreadsheet ID provided.")
+
+    return 0
+
+
 def interactive_mode(auth: AuthTokens, username: str) -> int:
     """Run interactive REPL mode."""
     print_welcome(username)
 
     # Show quick help
-    print("    Commands: search <query> | list | list add <query> | basket | help | quit\n")
+    print("    Commands: search <query> | list | plan | basket | help | quit\n")
 
     while True:
         try:
@@ -1050,10 +1836,18 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
     list budget [amt]   Show/set budget
     list sync           Push list to nemlig basket
     basket              Show nemlig basket
+    plan                🤖 AI meal planner (interactive chat)
+    import              📋 Import recipes from Google Form
     help                Show this help
     quit                Exit
     ─────────────────────────────────────────────────────
 """)
+
+        elif command == "plan":
+            meal_plan_chat(auth)
+
+        elif command == "import":
+            process_form_recipes(auth)
 
         elif command == "search" and len(parts) > 1:
             query = " ".join(parts[1:])
@@ -1171,7 +1965,31 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
                         print("  Invalid amount\n")
                 else:
                     total = sum(item.get("unit_price", 0) * item.get("quantity", 1) for item in data["items"])
-                    print(f"  Budget: {data['budget']:.2f} kr | Used: {total:.2f} kr | Remaining: {data['budget'] - total:.2f} kr\n")
+                    budget = data["budget"]
+                    remaining = budget - total
+                    print(f"  Budget: {budget:.2f} kr | Used: {total:.2f} kr | Remaining: {remaining:.2f} kr")
+
+                    # Progress bar
+                    if budget > 0:
+                        bar_width = 30
+                        pct = (total / budget) * 100
+                        filled = min(int((total / budget) * bar_width), bar_width)
+                        empty = bar_width - filled
+
+                        if pct > 100:
+                            bar = "\033[91m" + "█" * bar_width + "\033[0m"
+                            status = "\033[91mOVER BUDGET!\033[0m"
+                        elif pct > 90:
+                            bar = "\033[91m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"
+                            status = f"\033[91m{pct:.0f}%\033[0m"
+                        elif pct > 70:
+                            bar = "\033[93m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"
+                            status = f"\033[93m{pct:.0f}%\033[0m"
+                        else:
+                            bar = "\033[92m" + "█" * filled + "\033[90m" + "░" * empty + "\033[0m"
+                            status = f"\033[92m{pct:.0f}%\033[0m"
+
+                        print(f"  [{bar}] {status}\n")
             elif parts[1] == "sync":
                 data = load_grocery_list()
                 if not data["items"]:
@@ -1283,6 +2101,14 @@ Examples:
     # list sync
     list_sub.add_parser("sync", help="Push list items to nemlig basket")
 
+    # Plan command (AI meal planning)
+    subparsers.add_parser("plan", help="🤖 AI meal planner - build grocery list from recipes")
+
+    # Import command (Google Form recipes)
+    import_parser = subparsers.add_parser("import", help="📋 Import recipes from Google Form/Sheet")
+    import_parser.add_argument("spreadsheet_id", nargs="?", help="Google Spreadsheet ID (from URL)")
+    import_parser.add_argument("--setup", action="store_true", help="Run interactive setup")
+
     args = parser.parse_args()
 
     # Handle list commands that don't require authentication
@@ -1298,6 +2124,10 @@ Examples:
         elif list_cmd == "budget":
             return cmd_list_budget(args)
         # Commands that need auth fall through to below
+
+    # Handle import --setup (no auth needed)
+    if args.command == "import" and args.setup:
+        return cmd_import_setup()
 
     # Load credentials: config file first, CLI overrides
     try:
@@ -1358,6 +2188,10 @@ Examples:
                 return cmd_list_add(auth, args)
             elif args.list_cmd == "sync":
                 return cmd_list_sync(auth, args)
+        elif args.command == "plan":
+            return meal_plan_chat(auth)
+        elif args.command == "import":
+            return process_form_recipes(auth, args.spreadsheet_id)
         else:
             print(f"Unknown command: {args.command}", file=sys.stderr)
             return 1

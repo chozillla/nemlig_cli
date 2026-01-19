@@ -114,3 +114,21 @@ list-sync:
     fi
     echo '> uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "***" list sync'
     uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" list sync
+
+# 🤖 AI meal planner - build grocery list from recipes
+plan:
+    uv run python nemlig_cli.py plan
+
+# 📋 Import recipes from Google Form/Sheet
+import SPREADSHEET_ID="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "{{SPREADSHEET_ID}}" ]; then
+        uv run python nemlig_cli.py import
+    else
+        uv run python nemlig_cli.py import "{{SPREADSHEET_ID}}"
+    fi
+
+# Setup Google Sheets integration
+import-setup:
+    uv run python nemlig_cli.py import --setup
