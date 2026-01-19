@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 # Note: For Raspberry Pi AI Camera support, install picamera2 manually:
-# pip install picamera2
+# uv add picamera2
 
 [project.scripts]
 nemlig = "nemlig_cli:main"
