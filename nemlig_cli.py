@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# PYTHON_ARGCOMPLETE_OK
 """
 Nemlig.com CLI - A command-line interface for nemlig.com grocery shopping.
 
@@ -18,6 +19,7 @@ import itertools
 import json
 import os
 import re
+import readline
 import sys
 import threading
 import time
@@ -25,6 +27,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+import argcomplete
 import requests
 
 # Optional: Anthropic for AI meal planning
@@ -63,6 +66,40 @@ try:
     PICAMERA_AVAILABLE = True
 except ImportError:
     PICAMERA_AVAILABLE = False
+
+
+# Interactive mode commands for tab completion
+COMMANDS = ["search", "details", "list", "basket", "help", "quit", "exit"]
+LIST_SUBCOMMANDS = ["add", "remove", "clear", "budget", "sync"]
+
+
+class NemligCompleter:
+    """Tab completer for interactive mode."""
+
+    def __init__(self):
+        self.matches = []
+
+    def complete(self, text: str, state: int) -> str | None:
+        if state == 0:
+            line = readline.get_line_buffer()
+            self.matches = self._get_matches(line, text)
+        return self.matches[state] if state < len(self.matches) else None
+
+    def _get_matches(self, line: str, text: str) -> list[str]:
+        parts = line.split()
+
+        # First word - complete commands
+        if not parts or (len(parts) == 1 and not line.endswith(" ")):
+            return [cmd + " " for cmd in COMMANDS if cmd.startswith(text)]
+
+        # After "list" - complete subcommands
+        if parts[0] == "list":
+            if len(parts) == 1 and line.endswith(" "):
+                return [sub + " " for sub in LIST_SUBCOMMANDS]
+            elif len(parts) == 2 and not line.endswith(" "):
+                return [sub + " " for sub in LIST_SUBCOMMANDS if sub.startswith(text)]
+
+        return []
 
 
 class Spinner:
@@ -2243,6 +2280,17 @@ def interactive_mode(auth: AuthTokens, username: str) -> int:
     """Run interactive REPL mode."""
     print_welcome(username)
 
+    # Set up tab completion
+    completer = NemligCompleter()
+    readline.set_completer(completer.complete)
+    readline.set_completer_delims(" ")
+
+    # macOS uses libedit which needs different binding syntax
+    if readline.__doc__ and "libedit" in readline.__doc__:
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        readline.parse_and_bind("tab: complete")
+
     # Show quick help
     print("    Commands: search <query> | list | plan | basket | help | quit\n")
 
@@ -2578,6 +2626,7 @@ Examples:
     fridge_sub.add_parser("clear", help="Clear fridge inventory")
     fridge_sub.add_parser("suggest", help="AI suggestions based on fridge contents")
 
+    argcomplete.autocomplete(parser)
     args = parser.parse_args()
 
     # Handle list commands that don't require authentication
