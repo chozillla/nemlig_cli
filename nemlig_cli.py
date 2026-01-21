@@ -17,14 +17,100 @@ import argparse
 import json
 import re
 import sys
+import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import requests
 
+# Conditional import for camera support
+CAMERA_AVAILABLE = False
+try:
+    from picamera2 import Picamera2
+    from picamera2.devices.imx500 import IMX500
+
+    CAMERA_AVAILABLE = True
+except ImportError:
+    pass
+
 
 CONFIG_FILE = Path.home() / ".config" / "nemlig" / "login.json"
+INVENTORY_FILE = Path.home() / ".config" / "nemlig" / "inventory.txt"
+SHOPPING_LIST_FILE = Path.home() / ".config" / "nemlig" / "shopping_list.txt"
+DEFAULT_MODEL = "/usr/share/imx500-models/imx500_network_ssd_mobilenetv2_fpnlite_320x320_pp.rpk"
+
+
+@dataclass
+class InventoryItem:
+    """A produce item in the home inventory."""
+
+    name: str
+    quantity: int
+    last_seen: str  # ISO timestamp
+
+
+@dataclass
+class ShoppingItem:
+    """An item on the shopping list."""
+
+    name: str
+    quantity: int
+    added_date: str  # ISO timestamp
+
+
+@dataclass
+class Detection:
+    """A single object detection result."""
+
+    label: str
+    confidence: float
+    box: tuple  # (x, y, width, height)
+
+
+# COCO class IDs for produce (YOLOv8 COCO classes)
+COCO_PRODUCE_CLASSES = {
+    46: "banana",
+    47: "apple",
+    49: "orange",
+    50: "broccoli",
+    51: "carrot",
+}
+
+# All produce we support (including manual-only items)
+PRODUCE_CLASSES = {"banana", "apple", "orange", "broccoli", "carrot"}
+
+# Mapping from produce names to Danish search terms for nemlig.com
+PRODUCE_TO_NEMLIG = {
+    "apple": "æble",
+    "banana": "banan",
+    "orange": "appelsin",
+    "broccoli": "broccoli",
+    "carrot": "gulerod",
+    # Manual additions (camera can't detect, but shopping list supports)
+    "tomato": "tomat",
+    "cucumber": "agurk",
+    "pepper": "peberfrugt",
+    "lemon": "citron",
+    "potato": "kartoffel",
+    "onion": "løg",
+}
+
+# Restock thresholds - suggest for shopping list when below these quantities
+RESTOCK_THRESHOLDS = {
+    "apple": 2,
+    "banana": 3,
+    "orange": 2,
+    "broccoli": 1,
+    "carrot": 3,
+    "tomato": 3,
+    "cucumber": 2,
+    "pepper": 2,
+    "lemon": 2,
+    "potato": 5,
+    "onion": 3,
+}
 
 
 def load_config_credentials() -> dict:
@@ -54,6 +140,74 @@ def load_config_credentials() -> dict:
         "username": data.get("username"),
         "password": data.get("password"),
     }
+
+
+def load_inventory() -> dict[str, InventoryItem]:
+    """
+    Load inventory from text file.
+
+    Returns dict keyed by item name.
+    """
+    inventory = {}
+    if not INVENTORY_FILE.exists():
+        return inventory
+
+    with open(INVENTORY_FILE, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                name, quantity, last_seen = parts[0], int(parts[1]), parts[2]
+                inventory[name] = InventoryItem(
+                    name=name, quantity=quantity, last_seen=last_seen
+                )
+    return inventory
+
+
+def save_inventory(inventory: dict[str, InventoryItem]) -> None:
+    """Save inventory to text file."""
+    INVENTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(INVENTORY_FILE, "w", encoding="utf-8") as f:
+        f.write("# Nemlig CLI Produce Inventory\n")
+        f.write("# Format: name<TAB>quantity<TAB>last_seen\n")
+        for item in sorted(inventory.values(), key=lambda x: x.name):
+            f.write(f"{item.name}\t{item.quantity}\t{item.last_seen}\n")
+
+
+def load_shopping_list() -> dict[str, ShoppingItem]:
+    """
+    Load shopping list from text file.
+
+    Returns dict keyed by item name.
+    """
+    shopping_list = {}
+    if not SHOPPING_LIST_FILE.exists():
+        return shopping_list
+
+    with open(SHOPPING_LIST_FILE, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                name, quantity, added_date = parts[0], int(parts[1]), parts[2]
+                shopping_list[name] = ShoppingItem(
+                    name=name, quantity=quantity, added_date=added_date
+                )
+    return shopping_list
+
+
+def save_shopping_list(shopping_list: dict[str, ShoppingItem]) -> None:
+    """Save shopping list to text file."""
+    SHOPPING_LIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(SHOPPING_LIST_FILE, "w", encoding="utf-8") as f:
+        f.write("# Nemlig CLI Shopping List\n")
+        f.write("# Format: name<TAB>quantity<TAB>added_date\n")
+        for item in sorted(shopping_list.values(), key=lambda x: x.name):
+            f.write(f"{item.name}\t{item.quantity}\t{item.added_date}\n")
 
 
 BASE_URL = "https://www.nemlig.com"
@@ -708,6 +862,450 @@ def cmd_history(auth: AuthTokens, args: argparse.Namespace) -> int:
     return 0
 
 
+# =============================================================================
+# Camera and Inventory Commands
+# =============================================================================
+
+
+def capture_and_detect(
+    model_path: str = DEFAULT_MODEL,
+    timeout: float = 5.0,
+    min_confidence: float = 0.5,
+) -> list[Detection]:
+    """
+    Capture single frame from AI Camera and run object detection.
+
+    Returns list of Detection objects for produce items only.
+    """
+    if not CAMERA_AVAILABLE:
+        raise RuntimeError("Camera support not available. Install picamera2.")
+
+    model_path_obj = Path(model_path)
+    if not model_path_obj.exists():
+        raise FileNotFoundError(f"Model not found: {model_path}")
+
+    imx500 = IMX500(model_path)
+    picam2 = Picamera2(imx500.camera_num)
+
+    config = picam2.create_still_configuration(buffer_count=2)
+    picam2.start(config)
+
+    detections = []
+    start_time = time.time()
+
+    try:
+        while time.time() - start_time < timeout:
+            metadata = picam2.capture_metadata()
+            np_outputs = imx500.get_outputs(metadata, add_batch=True)
+
+            if np_outputs is not None:
+                # YOLOv8 post-processed outputs: boxes, scores, classes
+                boxes = np_outputs[0][0]
+                scores = np_outputs[1][0]
+                classes = np_outputs[2][0]
+
+                for box, score, class_id in zip(boxes, scores, classes):
+                    if score >= min_confidence:
+                        class_id_int = int(class_id)
+                        if class_id_int in COCO_PRODUCE_CLASSES:
+                            label = COCO_PRODUCE_CLASSES[class_id_int]
+                            detections.append(
+                                Detection(
+                                    label=label,
+                                    confidence=float(score),
+                                    box=tuple(box),
+                                )
+                            )
+                break
+
+            time.sleep(0.1)
+    finally:
+        picam2.stop()
+
+    return detections
+
+
+def run_preview_mode(model_path: str, min_confidence: float) -> list[Detection]:
+    """
+    Run live camera preview with detection overlays.
+
+    Press 'q' to quit, 'c' to capture current detections.
+    Returns the detections when user presses 'c', or empty list on 'q'.
+    """
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        print("Error: OpenCV required for preview mode.", file=sys.stderr)
+        print("Install with: sudo apt install python3-opencv", file=sys.stderr)
+        return []
+
+    imx500 = IMX500(model_path)
+    picam2 = Picamera2(imx500.camera_num)
+
+    # Configure for preview with larger size
+    config = picam2.create_preview_configuration(
+        main={"size": (640, 480), "format": "RGB888"},
+        buffer_count=4
+    )
+    picam2.start(config)
+
+    print("\n[Preview Mode]")
+    print("  Press 'c' to capture and use current detections")
+    print("  Press 'q' to quit without saving")
+    print()
+
+    captured_detections = []
+    window_name = "Nemlig Produce Scanner"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+
+    try:
+        while True:
+            # Capture frame
+            frame = picam2.capture_array()
+            metadata = picam2.capture_metadata()
+
+            # Get detections
+            np_outputs = imx500.get_outputs(metadata, add_batch=True)
+            current_detections = []
+
+            if np_outputs is not None:
+                boxes = np_outputs[0][0]
+                scores = np_outputs[1][0]
+                classes = np_outputs[2][0]
+
+                for box, score, class_id in zip(boxes, scores, classes):
+                    if score >= min_confidence:
+                        class_id_int = int(class_id)
+                        if class_id_int in COCO_PRODUCE_CLASSES:
+                            label = COCO_PRODUCE_CLASSES[class_id_int]
+                            current_detections.append(
+                                Detection(label=label, confidence=float(score), box=tuple(box))
+                            )
+
+                            # Draw bounding box on frame
+                            h, w = frame.shape[:2]
+                            x1, y1, x2, y2 = box
+                            # Convert normalized coords if needed (depends on model output)
+                            if x2 <= 1.0:  # Normalized coordinates
+                                x1, y1, x2, y2 = int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h)
+                            else:
+                                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+
+                            # Draw box and label
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            label_text = f"{label}: {score:.2f}"
+                            cv2.putText(frame, label_text, (x1, y1 - 10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+            # Show detection count
+            count_text = f"Detected: {len(current_detections)} produce items"
+            cv2.putText(frame, count_text, (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(frame, "Press 'c' to capture, 'q' to quit", (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+
+            # Display frame
+            cv2.imshow(window_name, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+
+            # Handle key presses
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                print("Cancelled.")
+                break
+            elif key == ord('c'):
+                captured_detections = current_detections
+                print(f"Captured {len(captured_detections)} detections.")
+                break
+
+    finally:
+        cv2.destroyAllWindows()
+        picam2.stop()
+
+    return captured_detections
+
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    """Handle the scan command - detect produce and update inventory."""
+    if not CAMERA_AVAILABLE:
+        print("Error: Camera support not available.", file=sys.stderr)
+        print("Install with: sudo apt install python3-picamera2 imx500-all", file=sys.stderr)
+        return 1
+
+    model_path = args.model
+    if not Path(model_path).exists():
+        print(f"Error: Model not found: {model_path}", file=sys.stderr)
+        print("Install with: sudo apt install imx500-models", file=sys.stderr)
+        return 1
+
+    try:
+        if args.preview:
+            # Live preview mode
+            detections = run_preview_mode(model_path, args.confidence)
+        else:
+            # Single capture mode
+            print("Scanning for produce...", file=sys.stderr)
+            detections = capture_and_detect(
+                model_path=model_path,
+                timeout=args.timeout,
+                min_confidence=args.confidence,
+            )
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if not detections:
+        print("No produce detected.")
+        return 0
+
+    # Count detections by label
+    counts: dict[str, int] = {}
+    for det in detections:
+        counts[det.label] = counts.get(det.label, 0) + 1
+
+    print("\nDetected:")
+    for label, count in sorted(counts.items()):
+        # Find max confidence for this label
+        max_conf = max(d.confidence for d in detections if d.label == label)
+        print(f"  {count}x {label} (confidence: {max_conf:.2f})")
+
+    # Show all individual detections in dry-run mode
+    if args.dry_run:
+        print("\n[Dry run - not updating inventory]")
+        print("\nAll detections:")
+        for i, det in enumerate(detections, 1):
+            print(f"  {i}. {det.label} (conf: {det.confidence:.3f}, box: {det.box})")
+        return 0
+
+    # Update inventory
+    inventory = load_inventory()
+    now = datetime.now().isoformat(timespec="seconds")
+
+    for label, count in counts.items():
+        inventory[label] = InventoryItem(name=label, quantity=count, last_seen=now)
+
+    save_inventory(inventory)
+    print("\nUpdated inventory.")
+
+    # Check for low stock
+    low_stock = []
+    for label, count in counts.items():
+        threshold = RESTOCK_THRESHOLDS.get(label, 2)
+        if count < threshold:
+            low_stock.append((label, count, threshold))
+
+    if low_stock:
+        print("\nLow stock alert:")
+        for label, count, threshold in low_stock:
+            print(f"  {label} ({count} detected, threshold {threshold})")
+
+        # Ask to add to shopping list
+        response = input("\nAdd low stock items to shopping list? [y/N]: ").strip().lower()
+        if response == "y":
+            shopping_list = load_shopping_list()
+            now = datetime.now().isoformat(timespec="seconds")
+            for label, count, threshold in low_stock:
+                needed = threshold - count + 1  # Order a bit extra
+                shopping_list[label] = ShoppingItem(
+                    name=label, quantity=needed, added_date=now
+                )
+            save_shopping_list(shopping_list)
+            print("Added to shopping list.")
+
+    return 0
+
+
+def cmd_inventory(args: argparse.Namespace) -> int:
+    """Handle the inventory command."""
+    action = args.inventory_action
+
+    if action == "show":
+        inventory = load_inventory()
+        if not inventory:
+            print("Inventory is empty.")
+            return 0
+
+        print("\nProduce Inventory:\n")
+        for item in sorted(inventory.values(), key=lambda x: x.name):
+            print(f"  {item.name:<12} {item.quantity:>3}    (seen: {item.last_seen})")
+        return 0
+
+    elif action == "add":
+        item_name = args.item.lower()
+        quantity = args.quantity
+
+        inventory = load_inventory()
+        now = datetime.now().isoformat(timespec="seconds")
+
+        if item_name in inventory:
+            inventory[item_name].quantity += quantity
+            inventory[item_name].last_seen = now
+        else:
+            inventory[item_name] = InventoryItem(
+                name=item_name, quantity=quantity, last_seen=now
+            )
+
+        save_inventory(inventory)
+        print(f"Added: {item_name} x{quantity}")
+        return 0
+
+    elif action == "remove":
+        item_name = args.item.lower()
+        quantity = args.quantity
+
+        inventory = load_inventory()
+
+        if item_name not in inventory:
+            print(f"Error: '{item_name}' not in inventory.", file=sys.stderr)
+            return 1
+
+        if quantity >= inventory[item_name].quantity:
+            del inventory[item_name]
+            print(f"Removed: {item_name} (all)")
+        else:
+            inventory[item_name].quantity -= quantity
+            print(f"Removed: {item_name} x{quantity} (remaining: {inventory[item_name].quantity})")
+
+        save_inventory(inventory)
+        return 0
+
+    elif action == "clear":
+        if INVENTORY_FILE.exists():
+            INVENTORY_FILE.unlink()
+        print("Inventory cleared.")
+        return 0
+
+    return 1
+
+
+def cmd_shopping_list(auth: AuthTokens | None, args: argparse.Namespace) -> int:
+    """Handle the shopping-list command."""
+    action = args.shopping_action
+
+    if action == "show":
+        shopping_list = load_shopping_list()
+        if not shopping_list:
+            print("Shopping list is empty.")
+            return 0
+
+        print("\nShopping List:\n")
+        for item in sorted(shopping_list.values(), key=lambda x: x.name):
+            print(f"  {item.name:<12} {item.quantity:>3}")
+        return 0
+
+    elif action == "add":
+        item_name = args.item.lower()
+        quantity = args.quantity
+
+        shopping_list = load_shopping_list()
+        now = datetime.now().isoformat(timespec="seconds")
+
+        if item_name in shopping_list:
+            shopping_list[item_name].quantity += quantity
+        else:
+            shopping_list[item_name] = ShoppingItem(
+                name=item_name, quantity=quantity, added_date=now
+            )
+
+        save_shopping_list(shopping_list)
+        print(f"Added to shopping list: {item_name} x{quantity}")
+        return 0
+
+    elif action == "remove":
+        item_name = args.item.lower()
+
+        shopping_list = load_shopping_list()
+
+        if item_name not in shopping_list:
+            print(f"Error: '{item_name}' not in shopping list.", file=sys.stderr)
+            return 1
+
+        del shopping_list[item_name]
+        save_shopping_list(shopping_list)
+        print(f"Removed from shopping list: {item_name}")
+        return 0
+
+    elif action == "clear":
+        if SHOPPING_LIST_FILE.exists():
+            SHOPPING_LIST_FILE.unlink()
+        print("Shopping list cleared.")
+        return 0
+
+    elif action == "to-basket":
+        if auth is None:
+            print("Error: Nemlig credentials required for to-basket.", file=sys.stderr)
+            return 1
+
+        shopping_list = load_shopping_list()
+        if not shopping_list:
+            print("Shopping list is empty.")
+            return 0
+
+        print("Searching nemlig.com...\n", file=sys.stderr)
+
+        added_count = 0
+        items_to_remove = []
+
+        for item in sorted(shopping_list.values(), key=lambda x: x.name):
+            # Get Danish search term
+            search_term = PRODUCE_TO_NEMLIG.get(item.name, item.name)
+
+            print(f"{item.name} -> \"{search_term}\":")
+
+            try:
+                products = search_products(auth, search_term, limit=3)
+            except Exception as e:
+                print(f"  Error searching: {e}")
+                continue
+
+            if not products:
+                print("  No products found.")
+                continue
+
+            # Display options
+            for i, product in enumerate(products, 1):
+                name = product.get("Name", "Unknown")
+                price = product.get("Price", 0)
+                product_id = product.get("Id", "")
+                print(f"  [{i}] {name} ({price:.2f} kr) [ID: {product_id}]")
+
+            # Get user selection
+            selection = input(f"Select [1-{len(products)}, s=skip]: ").strip().lower()
+
+            if selection == "s" or not selection:
+                print("  Skipped.")
+                continue
+
+            try:
+                idx = int(selection) - 1
+                if 0 <= idx < len(products):
+                    selected = products[idx]
+                    product_id = selected.get("Id")
+                    quantity = item.quantity
+
+                    result = add_to_basket(auth, product_id, quantity)
+                    print(f"  Added to basket: {selected.get('Name')} x{quantity}")
+                    added_count += 1
+                    items_to_remove.append(item.name)
+                else:
+                    print("  Invalid selection, skipped.")
+            except ValueError:
+                print("  Invalid input, skipped.")
+
+            print()
+
+        # Remove added items from shopping list
+        if items_to_remove:
+            for name in items_to_remove:
+                del shopping_list[name]
+            save_shopping_list(shopping_list)
+
+        print(f"Done! {added_count} item(s) added to basket.")
+        return 0
+
+    return 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Nemlig.com CLI - Command-line interface for grocery shopping",
@@ -727,6 +1325,13 @@ Examples:
   %(prog)s add 701025 --quantity 2
   %(prog)s history
   %(prog)s history 12345678
+
+  Inventory and camera commands (no login required):
+  %(prog)s scan                        # Detect produce with AI camera
+  %(prog)s inventory show              # Show produce inventory
+  %(prog)s inventory add apple -q 3    # Manually add items
+  %(prog)s shopping-list show          # Show shopping list
+  %(prog)s shopping-list to-basket     # Add items to nemlig basket (requires login)
 
   With explicit credentials:
   %(prog)s -u EMAIL -p PASS search "cocio"
@@ -760,43 +1365,110 @@ Examples:
     history_parser.add_argument("order_id", nargs="?", type=int, help="Order ID for details (optional)")
     history_parser.add_argument("-l", "--limit", type=int, default=10, help="Max orders to show (default: 10)")
 
+    # Scan command (AI camera produce detection)
+    scan_parser = subparsers.add_parser("scan", help="Scan produce with AI camera")
+    scan_parser.add_argument(
+        "--model", default=DEFAULT_MODEL, help=f"Model path (default: {DEFAULT_MODEL})"
+    )
+    scan_parser.add_argument(
+        "--timeout", type=float, default=5.0, help="Detection timeout in seconds (default: 5)"
+    )
+    scan_parser.add_argument(
+        "--confidence", type=float, default=0.5, help="Minimum confidence threshold (default: 0.5)"
+    )
+    scan_parser.add_argument(
+        "--preview", action="store_true", help="Show live camera preview with detections (dev mode)"
+    )
+    scan_parser.add_argument(
+        "--dry-run", action="store_true", help="Show detections without updating inventory"
+    )
+
+    # Inventory command
+    inventory_parser = subparsers.add_parser("inventory", help="Manage produce inventory")
+    inventory_subparsers = inventory_parser.add_subparsers(dest="inventory_action", required=True)
+
+    inventory_subparsers.add_parser("show", help="Show current inventory")
+
+    inv_add_parser = inventory_subparsers.add_parser("add", help="Add item to inventory")
+    inv_add_parser.add_argument("item", help="Item name (e.g., apple, tomato)")
+    inv_add_parser.add_argument("-q", "--quantity", type=int, default=1, help="Quantity (default: 1)")
+
+    inv_remove_parser = inventory_subparsers.add_parser("remove", help="Remove item from inventory")
+    inv_remove_parser.add_argument("item", help="Item name to remove")
+    inv_remove_parser.add_argument("-q", "--quantity", type=int, default=999, help="Quantity to remove (default: all)")
+
+    inventory_subparsers.add_parser("clear", help="Clear all inventory")
+
+    # Shopping list command
+    shopping_parser = subparsers.add_parser("shopping-list", help="Manage shopping list")
+    shopping_subparsers = shopping_parser.add_subparsers(dest="shopping_action", required=True)
+
+    shopping_subparsers.add_parser("show", help="Show shopping list")
+
+    shop_add_parser = shopping_subparsers.add_parser("add", help="Add item to shopping list")
+    shop_add_parser.add_argument("item", help="Item name (e.g., apple, tomato)")
+    shop_add_parser.add_argument("-q", "--quantity", type=int, default=1, help="Quantity (default: 1)")
+
+    shop_remove_parser = shopping_subparsers.add_parser("remove", help="Remove item from shopping list")
+    shop_remove_parser.add_argument("item", help="Item name to remove")
+
+    shopping_subparsers.add_parser("clear", help="Clear shopping list")
+    shopping_subparsers.add_parser("to-basket", help="Add shopping list items to nemlig basket")
+
     args = parser.parse_args()
 
-    # Load credentials: config file first, CLI overrides
+    # Commands that don't require authentication
+    NO_AUTH_COMMANDS = {"scan", "inventory"}
+    # shopping-list only needs auth for to-basket action
+    needs_auth = args.command not in NO_AUTH_COMMANDS
+    if args.command == "shopping-list" and args.shopping_action != "to-basket":
+        needs_auth = False
+
+    # Load credentials if needed
+    auth = None
+    if needs_auth:
+        try:
+            config_creds = load_config_credentials()
+        except (json.JSONDecodeError, ValueError, OSError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+        username = args.username or config_creds.get("username")
+        password = args.password or config_creds.get("password")
+
+        if not username or not password:
+            missing = []
+            if not username:
+                missing.append("username")
+            if not password:
+                missing.append("password")
+
+            if CONFIG_FILE.exists() and config_creds:
+                hint = f"Config file {CONFIG_FILE} missing {', '.join(missing)}."
+            elif CONFIG_FILE.exists():
+                hint = f"Config file {CONFIG_FILE} failed to load."
+            else:
+                hint = f"No config file at {CONFIG_FILE}."
+
+            print(
+                f"Error: Missing {' and '.join(missing)}. {hint} "
+                f"Provide via config file or -u/-p options.",
+                file=sys.stderr,
+            )
+            return 1
+
+        try:
+            auth = login(username, password)
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP Error: {e}", file=sys.stderr)
+            if e.response is not None:
+                print(f"Response: {e.response.text}", file=sys.stderr)
+            return 1
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
     try:
-        config_creds = load_config_credentials()
-    except (json.JSONDecodeError, ValueError, OSError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-    username = args.username or config_creds.get("username")
-    password = args.password or config_creds.get("password")
-
-    if not username or not password:
-        missing = []
-        if not username:
-            missing.append("username")
-        if not password:
-            missing.append("password")
-
-        if CONFIG_FILE.exists() and config_creds:
-            hint = f"Config file {CONFIG_FILE} missing {', '.join(missing)}."
-        elif CONFIG_FILE.exists():
-            hint = f"Config file {CONFIG_FILE} failed to load."
-        else:
-            hint = f"No config file at {CONFIG_FILE}."
-
-        print(
-            f"Error: Missing {' and '.join(missing)}. {hint} "
-            f"Provide via config file or -u/-p options.",
-            file=sys.stderr,
-        )
-        return 1
-
-    try:
-        # Authenticate
-        auth = login(username, password)
-
         # Execute command
         if args.command == "search":
             return cmd_search(auth, args)
@@ -808,6 +1480,12 @@ Examples:
             return cmd_add(auth, args)
         elif args.command == "history":
             return cmd_history(auth, args)
+        elif args.command == "scan":
+            return cmd_scan(args)
+        elif args.command == "inventory":
+            return cmd_inventory(args)
+        elif args.command == "shopping-list":
+            return cmd_shopping_list(auth, args)
         else:
             print(f"Unknown command: {args.command}", file=sys.stderr)
             return 1
