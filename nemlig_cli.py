@@ -1387,18 +1387,18 @@ MEAL_PLAN_TOOLS = [
         "type": "function",
         "function": {
             "name": "search_products",
-            "description": "Search for grocery products on nemlig.com. Returns a list of products with their IDs, names, prices, and availability.",
+            "description": "Search for grocery products on nemlig.com. Returns products with IDs, names, prices, and availability. If no results are found or the right product isn't in the results, try: (1) a different/simpler Danish search term, or (2) increase the limit to get more results (up to 50).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The search term (e.g., 'mælk', 'hakket oksekød', 'pasta')"
+                        "description": "The search term in Danish (e.g., 'mælk', 'hakket oksekød', 'pasta')"
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum number of results to return (default: 15)",
-                        "default": 15
+                        "description": "Number of results to return. Start with 10, increase to 25 or 50 if the product you need isn't found.",
+                        "default": 10
                     }
                 },
                 "required": ["query"]
@@ -1508,11 +1508,11 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
     try:
         if tool_name == "search_products":
             query = tool_input["query"]
-            limit = tool_input.get("limit", 15)
+            limit = tool_input.get("limit", 10)
             products = search_products(auth, query, limit=limit)
 
             if not products:
-                return f"No products found for '{query}'"
+                return f"No products found for '{query}'. Try a simpler/different Danish search term, or increase the limit."
 
             results = []
             for p in products:
@@ -1528,7 +1528,11 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
                     f"- ID: {pid} | {name} ({brand}) | {price:.2f} kr | {unit_price} | {stock}"
                 )
 
-            return f"Found {len(products)} products for '{query}':\n" + "\n".join(results)
+            header = f"Found {len(products)} products for '{query}':\n"
+            hint = ""
+            if len(products) == limit:
+                hint = f"\n(Showing {limit} results — increase limit to see more)"
+            return header + "\n".join(results) + hint
 
         elif tool_name == "add_to_grocery_list":
             product_id = str(tool_input["product_id"])
