@@ -27,16 +27,24 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import argcomplete
 import requests
 
-# Optional: Azure OpenAI for AI meal planning
+# Optional: OpenAI-compatible LLM backends (Azure, OpenAI, Mistral, Groq, etc.)
 try:
-    from openai import AzureOpenAI
+    from openai import AzureOpenAI, OpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+
+# Optional: Anthropic (Claude) backend
+try:
+    import anthropic as _anthropic_mod
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
 
 # Optional: Google Sheets for form responses
 try:
@@ -276,32 +284,279 @@ def load_config_credentials() -> dict:
     return {
         "username": data.get("username"),
         "password": data.get("password"),
+        # Generic AI config (works with any provider)
+        "ai_provider": data.get("ai_provider"),
+        "ai_api_key": data.get("ai_api_key"),
+        "ai_model": data.get("ai_model"),
+        "ai_base_url": data.get("ai_base_url"),
+        # Azure (legacy keys, still supported)
         "azure_api_key": data.get("azure_api_key"),
         "azure_endpoint": data.get("azure_endpoint"),
         "azure_deployment": data.get("azure_deployment"),
+        # OpenAI (legacy keys, still supported)
+        "openai_api_key": data.get("openai_api_key"),
+        "openai_model": data.get("openai_model"),
+        # Ollama (legacy keys, still supported)
+        "ollama_base_url": data.get("ollama_base_url"),
+        "ollama_model": data.get("ollama_model"),
     }
 
 
-def get_azure_client() -> "AzureOpenAI | None":
-    """Get Azure OpenAI client from config file or environment."""
-    # Try environment first, then config file
+# ---------------------------------------------------------------------------
+# LLM provider registry — plug-and-play backends
+# ---------------------------------------------------------------------------
+# Each entry maps a provider name to its base URL, default model, and the
+# environment-variable prefix used for API key / model overrides.
+# All providers listed here speak the OpenAI-compatible chat completions API
+# (except "anthropic", which uses a lightweight adapter below).
+
+_PROVIDER_REGISTRY: dict[str, dict] = {
+    # Cloud APIs — OpenAI-compatible
+    "openai":    {"base_url": None,                                       "default_model": "gpt-4o",                                              "env_prefix": "OPENAI"},
+    "mistral":   {"base_url": "https://api.mistral.ai/v1",               "default_model": "mistral-large-latest",                                "env_prefix": "MISTRAL"},
+    "groq":      {"base_url": "https://api.groq.com/openai/v1",          "default_model": "llama-3.3-70b-versatile",                             "env_prefix": "GROQ"},
+    "together":  {"base_url": "https://api.together.xyz/v1",             "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",             "env_prefix": "TOGETHER"},
+    "deepseek":  {"base_url": "https://api.deepseek.com",                "default_model": "deepseek-chat",                                       "env_prefix": "DEEPSEEK"},
+    "xai":       {"base_url": "https://api.x.ai/v1",                     "default_model": "grok-3",                                              "env_prefix": "XAI"},
+    "fireworks": {"base_url": "https://api.fireworks.ai/inference/v1",    "default_model": "accounts/fireworks/models/llama-v3p3-70b-instruct",   "env_prefix": "FIREWORKS"},
+    "openrouter":{"base_url": "https://openrouter.ai/api/v1",            "default_model": "openai/gpt-4o",                                       "env_prefix": "OPENROUTER"},
+    # Local / self-hosted
+    "ollama":    {"base_url": "http://localhost:11434/v1",                "default_model": "llama3.2",                                            "env_prefix": "OLLAMA",    "no_key": True},
+    "lmstudio":  {"base_url": "http://localhost:1234/v1",                 "default_model": "default",                                             "env_prefix": "LMSTUDIO",  "no_key": True},
+}
+
+
+# ---------------------------------------------------------------------------
+# Anthropic adapter — translates OpenAI chat-completions interface to the
+# Anthropic messages API so callers don't need to care about the difference.
+# ---------------------------------------------------------------------------
+
+class _AnthropicCompletions:
+    """Implements client.chat.completions.create() using the Anthropic SDK."""
+
+    def __init__(self, client):
+        self._client = client
+
+    # --- public API (mirrors openai) ---
+
+    def create(self, *, model, messages, max_completion_tokens=4096, tools=None, **_kwargs):
+        system_parts, converted = self._convert_messages(messages)
+
+        anthropic_tools = None
+        if tools:
+            anthropic_tools = [
+                {
+                    "name": t["function"]["name"],
+                    "description": t["function"].get("description", ""),
+                    "input_schema": t["function"]["parameters"],
+                }
+                for t in tools
+            ]
+
+        call_kw: dict = {
+            "model": model,
+            "max_tokens": max_completion_tokens,
+            "messages": converted,
+        }
+        if system_parts:
+            call_kw["system"] = "\n\n".join(system_parts)
+        if anthropic_tools:
+            call_kw["tools"] = anthropic_tools
+
+        resp = self._client.messages.create(**call_kw)
+        return self._to_openai_response(resp)
+
+    # --- internal helpers ---
+
+    @staticmethod
+    def _role_and_content(msg):
+        if isinstance(msg, dict):
+            return msg["role"], msg.get("content")
+        return msg.role, getattr(msg, "content", None)
+
+    @staticmethod
+    def _tool_calls_of(msg):
+        if isinstance(msg, dict):
+            return msg.get("tool_calls")
+        return getattr(msg, "tool_calls", None)
+
+    def _convert_messages(self, messages):
+        system_parts: list[str] = []
+        converted: list[dict] = []
+
+        for msg in messages:
+            role, content = self._role_and_content(msg)
+
+            if role == "system":
+                if content:
+                    system_parts.append(content)
+                continue
+
+            if role == "tool":
+                tid = msg.get("tool_call_id") if isinstance(msg, dict) else getattr(msg, "tool_call_id", "")
+                block = {"type": "tool_result", "tool_use_id": tid, "content": content or ""}
+                # Merge consecutive tool results into one user turn
+                if converted and converted[-1]["role"] == "user" and isinstance(converted[-1]["content"], list):
+                    converted[-1]["content"].append(block)
+                else:
+                    converted.append({"role": "user", "content": [block]})
+                continue
+
+            if role == "assistant":
+                tc = self._tool_calls_of(msg)
+                if tc:
+                    blocks: list[dict] = []
+                    if content:
+                        blocks.append({"type": "text", "text": content})
+                    for c in tc:
+                        blocks.append({
+                            "type": "tool_use",
+                            "id": c.id,
+                            "name": c.function.name,
+                            "input": json.loads(c.function.arguments),
+                        })
+                    converted.append({"role": "assistant", "content": blocks})
+                else:
+                    converted.append({"role": "assistant", "content": content or ""})
+                continue
+
+            # user (or any other role)
+            converted.append({"role": role, "content": content or ""})
+
+        return system_parts, converted
+
+    @staticmethod
+    def _to_openai_response(resp):
+        tool_blocks = [b for b in resp.content if b.type == "tool_use"]
+        text_blocks = [b for b in resp.content if b.type == "text"]
+        text = "\n".join(b.text for b in text_blocks) if text_blocks else None
+
+        if tool_blocks:
+            tool_calls = [
+                SimpleNamespace(
+                    id=b.id,
+                    function=SimpleNamespace(name=b.name, arguments=json.dumps(b.input)),
+                )
+                for b in tool_blocks
+            ]
+            message = SimpleNamespace(content=text, tool_calls=tool_calls, role="assistant")
+            finish = "tool_calls"
+        else:
+            message = SimpleNamespace(content=text, tool_calls=None, role="assistant")
+            finish = "stop"
+
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason=finish, message=message)])
+
+
+class _AnthropicAdapter:
+    """Drop-in replacement for openai.OpenAI that routes to Anthropic."""
+
+    def __init__(self, client):
+        self.chat = SimpleNamespace(completions=_AnthropicCompletions(client))
+
+
+# ---------------------------------------------------------------------------
+# Provider resolution + client factory
+# ---------------------------------------------------------------------------
+
+def _resolve_ai_provider(creds: dict) -> str:
+    """Determine AI provider: AI_PROVIDER env > config ai_provider > auto-detect > 'azure'."""
+    explicit = (os.environ.get("AI_PROVIDER", "").lower()
+                or (creds.get("ai_provider") or "").lower())
+    if explicit:
+        return explicit
+
+    # Auto-detect from provider-specific env vars
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    for name, info in _PROVIDER_REGISTRY.items():
+        env_key = f"{info['env_prefix']}_API_KEY"
+        if os.environ.get(env_key):
+            return name
+
+    # Auto-detect from config file keys
+    if creds.get("ai_api_key"):
+        return "openai"
+    if creds.get("azure_api_key"):
+        return "azure"
+    if creds.get("openai_api_key"):
+        return "openai"
+
+    return "azure"
+
+
+def get_ai_client() -> "tuple | None":
+    """Return (client, model_name) for the configured AI provider, or None.
+
+    Supports all providers in _PROVIDER_REGISTRY (OpenAI-compatible),
+    plus Azure OpenAI, Anthropic (Claude), and fully custom endpoints.
+    """
     try:
         creds = load_config_credentials()
     except Exception:
         creds = {}
 
-    api_key = os.environ.get("AZURE_API_KEY") or creds.get("azure_api_key")
-    endpoint = os.environ.get("AZURE_ENDPOINT") or creds.get("azure_endpoint") or "https://cehs-mk59u7e0-eastus2.cognitiveservices.azure.com/"
-    deployment = os.environ.get("AZURE_DEPLOYMENT") or creds.get("azure_deployment") or "gpt-5.2-2"
+    provider = _resolve_ai_provider(creds)
 
-    if not api_key:
+    # --- Azure OpenAI (special client class) ---
+    if provider == "azure":
+        api_key = os.environ.get("AZURE_API_KEY") or creds.get("azure_api_key") or creds.get("ai_api_key")
+        endpoint = os.environ.get("AZURE_ENDPOINT") or creds.get("azure_endpoint") or "https://cehs-mk59u7e0-eastus2.cognitiveservices.azure.com/"
+        model = os.environ.get("AZURE_DEPLOYMENT") or creds.get("azure_deployment") or creds.get("ai_model") or "gpt-5.2-2"
+        if not api_key:
+            return None
+        client = AzureOpenAI(
+            api_key=api_key,
+            azure_endpoint=endpoint,
+            api_version="2024-12-01-preview",
+        )
+        return client, model
+
+    # --- Anthropic (adapter wraps the native SDK) ---
+    if provider == "anthropic":
+        if not ANTHROPIC_AVAILABLE:
+            return None
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or creds.get("ai_api_key")
+        model = os.environ.get("ANTHROPIC_MODEL") or creds.get("ai_model") or "claude-sonnet-4-5-20250929"
+        if not api_key:
+            return None
+        client = _AnthropicAdapter(_anthropic_mod.Anthropic(api_key=api_key))
+        return client, model
+
+    # --- Custom endpoint (user provides everything) ---
+    if provider == "custom":
+        base_url = os.environ.get("CUSTOM_BASE_URL") or creds.get("ai_base_url")
+        api_key = os.environ.get("CUSTOM_API_KEY") or creds.get("ai_api_key") or "no-key"
+        model = os.environ.get("CUSTOM_MODEL") or creds.get("ai_model") or "default"
+        if not base_url:
+            return None
+        return OpenAI(base_url=base_url, api_key=api_key), model
+
+    # --- Registry-based providers (OpenAI-compatible) ---
+    info = _PROVIDER_REGISTRY.get(provider)
+    if not info:
         return None
 
-    return AzureOpenAI(
-        api_key=api_key,
-        azure_endpoint=endpoint,
-        api_version="2024-12-01-preview",
-    ), deployment
+    prefix = info["env_prefix"]
+    api_key = (os.environ.get(f"{prefix}_API_KEY")
+               or creds.get(f"{provider}_api_key")
+               or creds.get("ai_api_key"))
+    model = (os.environ.get(f"{prefix}_MODEL")
+             or creds.get(f"{provider}_model")
+             or creds.get("ai_model")
+             or info["default_model"])
+    base_url = (os.environ.get(f"{prefix}_BASE_URL")
+                or creds.get(f"{provider}_base_url")
+                or creds.get("ai_base_url")
+                or info["base_url"])
+
+    if not info.get("no_key") and not api_key:
+        return None
+
+    kw: dict = {"api_key": api_key or "no-key"}
+    if base_url:
+        kw["base_url"] = base_url
+    return OpenAI(**kw), model
 
 
 # Google Sheets config
@@ -1711,19 +1966,19 @@ IMPORTANT RULES:
 
 def meal_plan_chat(auth: AuthTokens) -> int:
     """Run the AI meal planning chat interface."""
-    if not OPENAI_AVAILABLE:
-        print("\n  Error: openai package not installed.")
-        print("  Run: uv add openai")
+    if not OPENAI_AVAILABLE and not ANTHROPIC_AVAILABLE:
+        print("\n  Error: No AI SDK installed.")
+        print("  Run: uv add openai   (or: uv add anthropic)")
         return 1
 
-    azure_result = get_azure_client()
-    if not azure_result:
-        print("\n  Error: Azure API key not found.")
-        print("  Set it in ~/.config/nemlig/login.json or as environment variable.")
-        print('  Example: {"azure_api_key": "...", "azure_endpoint": "...", "azure_deployment": "gpt-5.2-2"}')
+    ai_result = get_ai_client()
+    if not ai_result:
+        print("\n  Error: AI provider not configured.")
+        print("  Set AI_PROVIDER and credentials in ~/.config/nemlig/login.json or as environment variables.")
+        print(f"  Supported providers: azure, anthropic, {', '.join(_PROVIDER_REGISTRY)}, custom")
         return 1
 
-    client, deployment = azure_result
+    client, model = ai_result
     messages = [{"role": "system", "content": MEAL_PLAN_SYSTEM_PROMPT}]
 
     # Clear grocery list for fresh planning session
@@ -1766,7 +2021,7 @@ def meal_plan_chat(auth: AuthTokens) -> int:
 
         try:
             response = client.chat.completions.create(
-                model=deployment,
+                model=model,
                 max_completion_tokens=16384,
                 tools=MEAL_PLAN_TOOLS,
                 messages=messages
@@ -1804,7 +2059,7 @@ def meal_plan_chat(auth: AuthTokens) -> int:
             spinner.start()
             try:
                 response = client.chat.completions.create(
-                    model=deployment,
+                    model=model,
                     max_completion_tokens=16384,
                     tools=MEAL_PLAN_TOOLS,
                     messages=messages
@@ -1849,18 +2104,18 @@ Be thorough - include all ingredients mentioned in recipes. Use Danish names for
 
 
 def extract_ingredients_from_recipes(recipes_text: str) -> list[dict]:
-    """Use Azure OpenAI to extract ingredients from recipe text."""
-    if not OPENAI_AVAILABLE:
-        raise RuntimeError("openai package not installed")
+    """Use AI to extract ingredients from recipe text."""
+    if not OPENAI_AVAILABLE and not ANTHROPIC_AVAILABLE:
+        raise RuntimeError("No AI SDK installed (need openai or anthropic)")
 
-    azure_result = get_azure_client()
-    if not azure_result:
-        raise RuntimeError("Azure API key not configured")
+    ai_result = get_ai_client()
+    if not ai_result:
+        raise RuntimeError("AI provider not configured")
 
-    client, deployment = azure_result
+    client, model = ai_result
 
     response = client.chat.completions.create(
-        model=deployment,
+        model=model,
         max_completion_tokens=4096,
         messages=[
             {"role": "system", "content": RECIPE_EXTRACT_PROMPT},
@@ -2433,16 +2688,16 @@ def cmd_fridge_clear() -> int:
 
 def cmd_fridge_suggest(auth: AuthTokens) -> int:
     """Suggest grocery items based on fridge contents using AI."""
-    if not OPENAI_AVAILABLE:
-        print("  Error: openai package not installed.")
+    if not OPENAI_AVAILABLE and not ANTHROPIC_AVAILABLE:
+        print("  Error: No AI SDK installed (need openai or anthropic).")
         return 1
 
-    azure_result = get_azure_client()
-    if not azure_result:
-        print("  Error: Azure API key not configured.")
+    ai_result = get_ai_client()
+    if not ai_result:
+        print("  Error: AI provider not configured.")
         return 1
 
-    client, deployment = azure_result
+    client, model = ai_result
 
     inventory = load_fridge_inventory()
     grocery_list = load_grocery_list()
@@ -2458,7 +2713,7 @@ def cmd_fridge_suggest(auth: AuthTokens) -> int:
     print("\n  🤖 Analyzing fridge contents and suggesting items...\n")
 
     response = client.chat.completions.create(
-        model=deployment,
+        model=model,
         max_completion_tokens=1024,
         messages=[
             {"role": "system", "content": "You are a helpful Danish grocery shopping assistant. Give practical, concise suggestions."},

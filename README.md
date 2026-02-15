@@ -51,6 +51,75 @@ uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" search "milk"
 
 See `nemlig_api.md` for complete API documentation including request/response schemas.
 
+## AI Backend Configuration
+
+AI-powered features (meal planning, recipe import, fridge suggestions) are plug-and-play with any supported LLM backend. Set via `AI_PROVIDER` env var or `ai_provider` in `~/.config/nemlig/login.json`. If not set, the provider is auto-detected from available API keys.
+
+| Provider | `AI_PROVIDER` | Required env var | Default model |
+|----------|--------------|------------------|---------------|
+| Azure OpenAI | `azure` | `AZURE_API_KEY` + `AZURE_ENDPOINT` | `gpt-5.2-2` |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o` |
+| Anthropic (Claude) | `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5-20250929` |
+| Mistral | `mistral` | `MISTRAL_API_KEY` | `mistral-large-latest` |
+| Groq | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| Together AI | `together` | `TOGETHER_API_KEY` | `Llama-3.3-70B-Instruct-Turbo` |
+| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-chat` |
+| xAI (Grok) | `xai` | `XAI_API_KEY` | `grok-3` |
+| Fireworks AI | `fireworks` | `FIREWORKS_API_KEY` | `llama-v3p3-70b-instruct` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `openai/gpt-4o` |
+| Ollama (local) | `ollama` | *(none — just run Ollama)* | `llama3.2` |
+| LM Studio (local) | `lmstudio` | *(none — just run LM Studio)* | `default` |
+| Custom endpoint | `custom` | `CUSTOM_BASE_URL` | `default` |
+
+### Quick start (env vars)
+
+```bash
+export AI_PROVIDER=openai          # pick your provider
+export OPENAI_API_KEY="sk-..."     # set the matching API key
+```
+
+Each provider follows the pattern `{PREFIX}_API_KEY` and `{PREFIX}_MODEL` (optional). See `.env.example` for the full list.
+
+### Config file (`~/.config/nemlig/login.json`)
+
+You can also use generic `ai_*` keys that work with any provider:
+
+```json
+{
+  "username": "your@email.com",
+  "password": "yourpassword",
+  "ai_provider": "groq",
+  "ai_api_key": "gsk_...",
+  "ai_model": "llama-3.3-70b-versatile"
+}
+```
+
+Or provider-specific keys (for backward compatibility):
+
+```json
+{
+  "ai_provider": "openai",
+  "openai_api_key": "sk-...",
+  "openai_model": "gpt-4o"
+}
+```
+
+### Custom / self-hosted endpoints
+
+Any OpenAI-compatible server works with `custom`:
+
+```bash
+export AI_PROVIDER=custom
+export CUSTOM_BASE_URL="https://your-server.com/v1"
+export CUSTOM_API_KEY="your-key"
+export CUSTOM_MODEL="your-model"
+```
+
+### Dependencies
+
+- Most providers: `uv add openai` (the `openai` package talks to any OpenAI-compatible API)
+- Anthropic: `uv add anthropic` (uses the native Anthropic SDK with a built-in adapter)
+
 ---
 
 ## Development Workflow: API Discovery with Chrome DevTools MCP
