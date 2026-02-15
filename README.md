@@ -2,17 +2,61 @@
 
 Command-line interface for [nemlig.com](https://www.nemlig.com) Danish online grocery store. Single-file Python implementation using `requests` for HTTP and `argparse` for CLI parsing.
 
+> Fork of [eisbaw/nemlig_cli](https://github.com/eisbaw/nemlig_cli) — extended with AI meal planning, grocery list management, fridge scanning, a GUI, and plug-and-play multi-provider LLM support.
+
 ## Features
 
-- Product search and details
-- Shopping basket management (view, add items)
-- Order history viewing
+### Core shopping
+- **Product search** with configurable result limits and retry hints
+- **Product details** — full info by product ID
+- **Basket management** — view contents, add items with quantity
+- **Order history** — list past orders, view order details
+
+### Grocery list management
+- **Local grocery list** with persistent storage (`~/.config/nemlig/shopping_list.txt`)
+- **Add by search term** — `list add "mælk"` searches and adds the top match
+- **Budget tracking** — set a budget in kr, see a color-coded progress bar (green/yellow/red)
+- **Sync to basket** — push the entire list to your nemlig.com cart in one command
+
+### AI meal planning
+- **Interactive chat** — describe your preferences ("high protein, minimal cooking") and the AI builds a weekly meal plan
+- **Automatic shopping list** — the AI searches nemlig.com and adds ingredients via function calling / tool use
+- **Recipe import** — pull recipes from a Google Form/Sheet, extract ingredients with AI, and add them to the list
+- **Fridge suggestions** — AI analyzes your fridge inventory and suggests what to buy
+
+### Fridge scanner & inventory
+- **Real-time camera scanning** with barcode reading (pyzbar) and AI produce detection
+- **Barcode lookup** via OpenFoodFacts API — auto-adds recognized products to inventory
+- **Color-based produce detection** fallback (banana, apple, orange, tomato, broccoli, etc.)
+- **Raspberry Pi AI Camera** support (picamera2 + IMX500 YOLO model)
+- **Persistent fridge inventory** (`~/.config/nemlig/inventory.txt`)
+
+### GUI application (`nemlig_gui.py`)
+- **Tkinter desktop app** with live camera feed and object detection overlays
+- **Detection list** with confidence scores and auto-add countdown
+- **Inventory + shopping list** management panels
+- **Training data collection** — label corrections and sample saving for custom YOLO models
+
+### Plug-and-play LLM backends
+- **13 providers** out of the box: Azure OpenAI, OpenAI, Anthropic (Claude), Mistral, Groq, Together AI, DeepSeek, xAI, Fireworks, OpenRouter, Ollama, LM Studio, and any custom OpenAI-compatible endpoint
+- **Anthropic adapter** — built-in translation layer so Claude works with the same code path (incl. tool calls)
+- **Auto-detection** — set one env var and the right provider is picked automatically
+
+### Interactive mode
+- **REPL** with tab completion for all commands and subcommands
+- Enters automatically when no command is given
 
 ## Requirements
 
 - Python >= 3.11
 - [uv](https://github.com/astral-sh/uv) package manager
 - Credentials for nemlig.com account
+
+Optional (for AI/scanning features):
+- `openai` or `anthropic` package — for AI meal planning, recipe import, fridge suggestions
+- `opencv-python`, `pyzbar`, `Pillow`, `openfoodfacts` — for barcode/fridge scanning
+- `google-api-python-client`, `google-auth-*` — for Google Sheets recipe import
+- `picamera2` — for Raspberry Pi AI Camera
 
 ```bash
 # Set credentials as environment variables
@@ -31,6 +75,28 @@ just basket                      # View basket
 just add 701025 2                # Add product (quantity optional)
 just history                     # Order history
 just history 12345678            # Order details
+```
+
+Additional commands:
+
+```bash
+# Grocery list
+just list                        # Show list with budget progress
+just list-add "mælk"             # Add by search term
+just list-budget 500             # Set budget to 500 kr
+just list-sync                   # Push list to nemlig.com basket
+
+# AI meal planning
+just plan                        # Start interactive AI meal planner
+
+# Recipe import (Google Sheets)
+just import                      # Import recipes from configured sheet
+just import-setup                # Set up Google Sheets OAuth
+
+# Fridge scanner
+just scan                        # Start camera scanner
+just fridge                      # Show fridge inventory
+just fridge-suggest              # AI-powered shopping suggestions
 ```
 
 Direct execution:
@@ -218,16 +284,18 @@ This provides a reliable reference for expected API behavior.
 
 ```
 nemlig-cli/
-├── .mcp.json                       # MCP server configuration
-├── chrome-devtools-mcp-wrapper.sh  # Nix-shell wrapper for MCP server
-├── .chrome-profile/                # Local browser profile (gitignored)
-├── arch_api.drawio.svg             # API architecture diagram
-├── mcp-workflow.drawio.svg         # MCP workflow diagram
-├── nemlig_api.md                   # API documentation (built via workflow)
-├── nemlig_cli.py                   # Python client implementation
+├── nemlig_cli.py                   # Main CLI — all commands, API client, AI features
+├── nemlig_gui.py                   # Tkinter GUI for camera scanning & inventory
+├── train_model.py                  # YOLO11 model training for produce detection
 ├── justfile                        # Command shortcuts
 ├── pyproject.toml                  # Python project config
-└── CLAUDE.md                       # AI assistant instructions
+├── .env.example                    # Environment variable templates (all providers)
+├── CLAUDE.md                       # AI assistant instructions
+├── nemlig_api.md                   # API documentation (built via MCP workflow)
+├── arch_api.drawio.svg             # API architecture diagram
+├── mcp-workflow.drawio.svg         # MCP workflow diagram
+├── .mcp.json                       # MCP server configuration
+└── chrome-devtools-mcp-wrapper.sh  # Nix-shell wrapper for MCP server
 ```
 
 ## License
