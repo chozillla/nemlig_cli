@@ -13,14 +13,16 @@ Command-line interface for [nemlig.com](https://www.nemlig.com) Danish online gr
 - **Order history** — list past orders, view order details
 
 ### Grocery list management
-- **Local grocery list** with persistent storage (`~/.config/nemlig/shopping_list.txt`)
+- **Local grocery list** with persistent storage (`~/.config/nemlig/grocery_list.json`)
 - **Add by search term** — `list add "mælk"` searches and adds the top match
 - **Budget tracking** — set a budget in kr, see a color-coded progress bar (green/yellow/red)
 - **Sync to basket** — push the entire list to your nemlig.com cart in one command
 
 ### AI meal planning
-- **Interactive chat** — describe your preferences ("high protein, minimal cooking") and the AI builds a weekly meal plan
+- **Guided survey** — interactive questionnaire collects diet, allergies, number of people, meals per day, days, and budget before the AI starts planning
+- **Live progress display** — friendly status updates during planning (searching, adding items, budget bar) so you always know what's happening
 - **Automatic shopping list** — the AI searches nemlig.com and adds ingredients via function calling / tool use
+- **Free-text mode** — skip the survey with `--cli` and describe preferences in your own words instead
 - **Recipe import** — pull recipes from a Google Form/Sheet, extract ingredients with AI, and add them to the list
 - **Fridge suggestions** — AI analyzes your fridge inventory and suggests what to buy
 
@@ -87,7 +89,8 @@ just list-budget 500             # Set budget to 500 kr
 just list-sync                   # Push list to nemlig.com basket
 
 # AI meal planning
-just plan                        # Start interactive AI meal planner
+just plan                        # Guided survey → auto-plan
+just plan --cli                  # Free-text chat (skip survey)
 
 # Recipe import (Google Sheets)
 just import                      # Import recipes from configured sheet
