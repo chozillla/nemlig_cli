@@ -115,9 +115,9 @@ list-sync:
     echo '> uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "***" list sync'
     uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" list sync
 
-# 🤖 AI meal planner - build grocery list from recipes
-plan:
-    uv run python nemlig_cli.py plan
+# 🤖 AI meal planner - guided survey (use --cli for free-text chat)
+plan *FLAGS:
+    uv run python nemlig_cli.py plan {{FLAGS}}
 
 # 📋 Import recipes from Google Form/Sheet
 import SPREADSHEET_ID="":
