@@ -27,13 +27,21 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import argcomplete
 import requests
 
-# Optional: Anthropic for AI meal planning
+# Optional: OpenAI-compatible LLM backends (Azure, OpenAI, Mistral, Groq, etc.)
 try:
-    import anthropic
+    from openai import AzureOpenAI, OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+
+# Optional: Anthropic (Claude) backend
+try:
+    import anthropic as _anthropic_mod
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
@@ -276,23 +284,279 @@ def load_config_credentials() -> dict:
     return {
         "username": data.get("username"),
         "password": data.get("password"),
-        "anthropic_api_key": data.get("anthropic_api_key"),
+        # Generic AI config (works with any provider)
+        "ai_provider": data.get("ai_provider"),
+        "ai_api_key": data.get("ai_api_key"),
+        "ai_model": data.get("ai_model"),
+        "ai_base_url": data.get("ai_base_url"),
+        # Azure (legacy keys, still supported)
+        "azure_api_key": data.get("azure_api_key"),
+        "azure_endpoint": data.get("azure_endpoint"),
+        "azure_deployment": data.get("azure_deployment"),
+        # OpenAI (legacy keys, still supported)
+        "openai_api_key": data.get("openai_api_key"),
+        "openai_model": data.get("openai_model"),
+        # Ollama (legacy keys, still supported)
+        "ollama_base_url": data.get("ollama_base_url"),
+        "ollama_model": data.get("ollama_model"),
     }
 
 
-def get_anthropic_api_key() -> str | None:
-    """Get Anthropic API key from config file or environment."""
-    # Try environment first
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if api_key:
-        return api_key
+# ---------------------------------------------------------------------------
+# LLM provider registry — plug-and-play backends
+# ---------------------------------------------------------------------------
+# Each entry maps a provider name to its base URL, default model, and the
+# environment-variable prefix used for API key / model overrides.
+# All providers listed here speak the OpenAI-compatible chat completions API
+# (except "anthropic", which uses a lightweight adapter below).
 
-    # Try config file
+_PROVIDER_REGISTRY: dict[str, dict] = {
+    # Cloud APIs — OpenAI-compatible
+    "openai":    {"base_url": None,                                       "default_model": "gpt-4o",                                              "env_prefix": "OPENAI"},
+    "mistral":   {"base_url": "https://api.mistral.ai/v1",               "default_model": "mistral-large-latest",                                "env_prefix": "MISTRAL"},
+    "groq":      {"base_url": "https://api.groq.com/openai/v1",          "default_model": "llama-3.3-70b-versatile",                             "env_prefix": "GROQ"},
+    "together":  {"base_url": "https://api.together.xyz/v1",             "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",             "env_prefix": "TOGETHER"},
+    "deepseek":  {"base_url": "https://api.deepseek.com",                "default_model": "deepseek-chat",                                       "env_prefix": "DEEPSEEK"},
+    "xai":       {"base_url": "https://api.x.ai/v1",                     "default_model": "grok-3",                                              "env_prefix": "XAI"},
+    "fireworks": {"base_url": "https://api.fireworks.ai/inference/v1",    "default_model": "accounts/fireworks/models/llama-v3p3-70b-instruct",   "env_prefix": "FIREWORKS"},
+    "openrouter":{"base_url": "https://openrouter.ai/api/v1",            "default_model": "openai/gpt-4o",                                       "env_prefix": "OPENROUTER"},
+    # Local / self-hosted
+    "ollama":    {"base_url": "http://localhost:11434/v1",                "default_model": "llama3.2",                                            "env_prefix": "OLLAMA",    "no_key": True},
+    "lmstudio":  {"base_url": "http://localhost:1234/v1",                 "default_model": "default",                                             "env_prefix": "LMSTUDIO",  "no_key": True},
+}
+
+
+# ---------------------------------------------------------------------------
+# Anthropic adapter — translates OpenAI chat-completions interface to the
+# Anthropic messages API so callers don't need to care about the difference.
+# ---------------------------------------------------------------------------
+
+class _AnthropicCompletions:
+    """Implements client.chat.completions.create() using the Anthropic SDK."""
+
+    def __init__(self, client):
+        self._client = client
+
+    # --- public API (mirrors openai) ---
+
+    def create(self, *, model, messages, max_completion_tokens=4096, tools=None, **_kwargs):
+        system_parts, converted = self._convert_messages(messages)
+
+        anthropic_tools = None
+        if tools:
+            anthropic_tools = [
+                {
+                    "name": t["function"]["name"],
+                    "description": t["function"].get("description", ""),
+                    "input_schema": t["function"]["parameters"],
+                }
+                for t in tools
+            ]
+
+        call_kw: dict = {
+            "model": model,
+            "max_tokens": max_completion_tokens,
+            "messages": converted,
+        }
+        if system_parts:
+            call_kw["system"] = "\n\n".join(system_parts)
+        if anthropic_tools:
+            call_kw["tools"] = anthropic_tools
+
+        resp = self._client.messages.create(**call_kw)
+        return self._to_openai_response(resp)
+
+    # --- internal helpers ---
+
+    @staticmethod
+    def _role_and_content(msg):
+        if isinstance(msg, dict):
+            return msg["role"], msg.get("content")
+        return msg.role, getattr(msg, "content", None)
+
+    @staticmethod
+    def _tool_calls_of(msg):
+        if isinstance(msg, dict):
+            return msg.get("tool_calls")
+        return getattr(msg, "tool_calls", None)
+
+    def _convert_messages(self, messages):
+        system_parts: list[str] = []
+        converted: list[dict] = []
+
+        for msg in messages:
+            role, content = self._role_and_content(msg)
+
+            if role == "system":
+                if content:
+                    system_parts.append(content)
+                continue
+
+            if role == "tool":
+                tid = msg.get("tool_call_id") if isinstance(msg, dict) else getattr(msg, "tool_call_id", "")
+                block = {"type": "tool_result", "tool_use_id": tid, "content": content or ""}
+                # Merge consecutive tool results into one user turn
+                if converted and converted[-1]["role"] == "user" and isinstance(converted[-1]["content"], list):
+                    converted[-1]["content"].append(block)
+                else:
+                    converted.append({"role": "user", "content": [block]})
+                continue
+
+            if role == "assistant":
+                tc = self._tool_calls_of(msg)
+                if tc:
+                    blocks: list[dict] = []
+                    if content:
+                        blocks.append({"type": "text", "text": content})
+                    for c in tc:
+                        blocks.append({
+                            "type": "tool_use",
+                            "id": c.id,
+                            "name": c.function.name,
+                            "input": json.loads(c.function.arguments),
+                        })
+                    converted.append({"role": "assistant", "content": blocks})
+                else:
+                    converted.append({"role": "assistant", "content": content or ""})
+                continue
+
+            # user (or any other role)
+            converted.append({"role": role, "content": content or ""})
+
+        return system_parts, converted
+
+    @staticmethod
+    def _to_openai_response(resp):
+        tool_blocks = [b for b in resp.content if b.type == "tool_use"]
+        text_blocks = [b for b in resp.content if b.type == "text"]
+        text = "\n".join(b.text for b in text_blocks) if text_blocks else None
+
+        if tool_blocks:
+            tool_calls = [
+                SimpleNamespace(
+                    id=b.id,
+                    function=SimpleNamespace(name=b.name, arguments=json.dumps(b.input)),
+                )
+                for b in tool_blocks
+            ]
+            message = SimpleNamespace(content=text, tool_calls=tool_calls, role="assistant")
+            finish = "tool_calls"
+        else:
+            message = SimpleNamespace(content=text, tool_calls=None, role="assistant")
+            finish = "stop"
+
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason=finish, message=message)])
+
+
+class _AnthropicAdapter:
+    """Drop-in replacement for openai.OpenAI that routes to Anthropic."""
+
+    def __init__(self, client):
+        self.chat = SimpleNamespace(completions=_AnthropicCompletions(client))
+
+
+# ---------------------------------------------------------------------------
+# Provider resolution + client factory
+# ---------------------------------------------------------------------------
+
+def _resolve_ai_provider(creds: dict) -> str:
+    """Determine AI provider: AI_PROVIDER env > config ai_provider > auto-detect > 'azure'."""
+    explicit = (os.environ.get("AI_PROVIDER", "").lower()
+                or (creds.get("ai_provider") or "").lower())
+    if explicit:
+        return explicit
+
+    # Auto-detect from provider-specific env vars
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    for name, info in _PROVIDER_REGISTRY.items():
+        env_key = f"{info['env_prefix']}_API_KEY"
+        if os.environ.get(env_key):
+            return name
+
+    # Auto-detect from config file keys
+    if creds.get("ai_api_key"):
+        return "openai"
+    if creds.get("azure_api_key"):
+        return "azure"
+    if creds.get("openai_api_key"):
+        return "openai"
+
+    return "azure"
+
+
+def get_ai_client() -> "tuple | None":
+    """Return (client, model_name) for the configured AI provider, or None.
+
+    Supports all providers in _PROVIDER_REGISTRY (OpenAI-compatible),
+    plus Azure OpenAI, Anthropic (Claude), and fully custom endpoints.
+    """
     try:
         creds = load_config_credentials()
-        return creds.get("anthropic_api_key")
     except Exception:
+        creds = {}
+
+    provider = _resolve_ai_provider(creds)
+
+    # --- Azure OpenAI (special client class) ---
+    if provider == "azure":
+        api_key = os.environ.get("AZURE_API_KEY") or creds.get("azure_api_key") or creds.get("ai_api_key")
+        endpoint = os.environ.get("AZURE_ENDPOINT") or creds.get("azure_endpoint") or "https://cehs-mk59u7e0-eastus2.cognitiveservices.azure.com/"
+        model = os.environ.get("AZURE_DEPLOYMENT") or creds.get("azure_deployment") or creds.get("ai_model") or "gpt-5.2-2"
+        if not api_key:
+            return None
+        client = AzureOpenAI(
+            api_key=api_key,
+            azure_endpoint=endpoint,
+            api_version="2024-12-01-preview",
+        )
+        return client, model
+
+    # --- Anthropic (adapter wraps the native SDK) ---
+    if provider == "anthropic":
+        if not ANTHROPIC_AVAILABLE:
+            return None
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or creds.get("ai_api_key")
+        model = os.environ.get("ANTHROPIC_MODEL") or creds.get("ai_model") or "claude-sonnet-4-5-20250929"
+        if not api_key:
+            return None
+        client = _AnthropicAdapter(_anthropic_mod.Anthropic(api_key=api_key))
+        return client, model
+
+    # --- Custom endpoint (user provides everything) ---
+    if provider == "custom":
+        base_url = os.environ.get("CUSTOM_BASE_URL") or creds.get("ai_base_url")
+        api_key = os.environ.get("CUSTOM_API_KEY") or creds.get("ai_api_key") or "no-key"
+        model = os.environ.get("CUSTOM_MODEL") or creds.get("ai_model") or "default"
+        if not base_url:
+            return None
+        return OpenAI(base_url=base_url, api_key=api_key), model
+
+    # --- Registry-based providers (OpenAI-compatible) ---
+    info = _PROVIDER_REGISTRY.get(provider)
+    if not info:
         return None
+
+    prefix = info["env_prefix"]
+    api_key = (os.environ.get(f"{prefix}_API_KEY")
+               or creds.get(f"{provider}_api_key")
+               or creds.get("ai_api_key"))
+    model = (os.environ.get(f"{prefix}_MODEL")
+             or creds.get(f"{provider}_model")
+             or creds.get("ai_model")
+             or info["default_model"])
+    base_url = (os.environ.get(f"{prefix}_BASE_URL")
+                or creds.get(f"{provider}_base_url")
+                or creds.get("ai_base_url")
+                or info["base_url"])
+
+    if not info.get("no_key") and not api_key:
+        return None
+
+    kw: dict = {"api_key": api_key or "no-key"}
+    if base_url:
+        kw["base_url"] = base_url
+    return OpenAI(**kw), model
 
 
 # Google Sheets config
@@ -440,6 +704,18 @@ class AuthTokens:
     bearer_token: str
     session: requests.Session
 
+    def refresh(self) -> None:
+        """Refresh bearer and XSRF tokens using the existing session."""
+        headers = get_common_headers()
+        headers["X-Correlation-Id"] = str(uuid.uuid4())
+        resp = self.session.get(f"{BASE_URL}/webapi/Token", headers=headers)
+        resp.raise_for_status()
+        self.bearer_token = resp.json()["access_token"]
+
+        resp = self.session.get(f"{BASE_URL}/webapi/AntiForgery", headers=headers)
+        resp.raise_for_status()
+        self.xsrf_token = resp.json()["Value"]
+
 
 class ProductNotFoundError(Exception):
     """Raised when a product cannot be found by ID."""
@@ -545,6 +821,14 @@ def get_app_settings(auth: AuthTokens) -> dict:
     headers["X-XSRF-TOKEN"] = auth.xsrf_token
 
     resp = auth.session.get(f"{BASE_URL}/webapi/v2/AppSettings/Website", headers=headers)
+
+    # Auto-refresh tokens on 401
+    if resp.status_code == 401:
+        auth.refresh()
+        headers["Authorization"] = f"Bearer {auth.bearer_token}"
+        headers["X-XSRF-TOKEN"] = auth.xsrf_token
+        resp = auth.session.get(f"{BASE_URL}/webapi/v2/AppSettings/Website", headers=headers)
+
     resp.raise_for_status()
     return resp.json()
 
@@ -562,6 +846,14 @@ def get_page_settings(auth: AuthTokens) -> dict:
     # Get page JSON which contains timeslot info
     params = {"GetAsJson": "1", "d": "1"}
     resp = auth.session.get(f"{BASE_URL}/", headers=headers, params=params)
+
+    # Auto-refresh tokens on 401
+    if resp.status_code == 401:
+        auth.refresh()
+        headers["Authorization"] = f"Bearer {auth.bearer_token}"
+        headers["X-XSRF-TOKEN"] = auth.xsrf_token
+        resp = auth.session.get(f"{BASE_URL}/", headers=headers, params=params)
+
     resp.raise_for_status()
     data = resp.json()
 
@@ -608,6 +900,13 @@ def search_products(auth: AuthTokens, query: str, limit: int = 10) -> list:
         params["includeFavorites"] = page_settings["userId"]
 
     resp = auth.session.get(f"{SEARCH_API_URL}/search", headers=headers, params=params)
+
+    # Auto-refresh tokens on 401
+    if resp.status_code == 401:
+        auth.refresh()
+        headers["Authorization"] = f"Bearer {auth.bearer_token}"
+        resp = auth.session.get(f"{SEARCH_API_URL}/search", headers=headers, params=params)
+
     resp.raise_for_status()
     data = resp.json()
 
@@ -1340,88 +1639,123 @@ def cmd_list_sync(auth: AuthTokens, args: argparse.Namespace) -> int:
 
 MEAL_PLAN_TOOLS = [
     {
-        "name": "search_products",
-        "description": "Search for grocery products on nemlig.com. Returns a list of products with their IDs, names, prices, and availability.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search term (e.g., 'mælk', 'hakket oksekød', 'pasta')"
+        "type": "function",
+        "function": {
+            "name": "search_products",
+            "description": "Search for grocery products on nemlig.com. Returns products with IDs, names, prices, and availability. If no results are found or the right product isn't in the results, try: (1) a different/simpler Danish search term, or (2) increase the limit to get more results (up to 50).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search term in Danish (e.g., 'mælk', 'hakket oksekød', 'pasta')"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of results to return. Start with 10, increase to 25 or 50 if the product you need isn't found.",
+                        "default": 10
+                    }
                 },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of results to return (default: 5)",
-                    "default": 5
-                }
-            },
-            "required": ["query"]
+                "required": ["query"]
+            }
         }
     },
     {
-        "name": "add_to_grocery_list",
-        "description": "Add a product to the grocery list by its product ID. Use search_products first to find the product ID.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "product_id": {
-                    "type": "string",
-                    "description": "The product ID from search results"
+        "type": "function",
+        "function": {
+            "name": "add_to_grocery_list",
+            "description": "Add a product to the grocery list by its product ID. Use search_products first to find the product ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "description": "The product ID from search results"
+                    },
+                    "quantity": {
+                        "type": "integer",
+                        "description": "Number of items to add (default: 1)",
+                        "default": 1
+                    }
                 },
-                "quantity": {
-                    "type": "integer",
-                    "description": "Number of items to add (default: 1)",
-                    "default": 1
-                }
-            },
-            "required": ["product_id"]
+                "required": ["product_id"]
+            }
         }
     },
     {
-        "name": "view_grocery_list",
-        "description": "View the current grocery list with all items, quantities, and budget status.",
-        "input_schema": {
-            "type": "object",
-            "properties": {}
+        "type": "function",
+        "function": {
+            "name": "view_grocery_list",
+            "description": "View the current grocery list with all items, quantities, and budget status.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
         }
     },
     {
-        "name": "remove_from_grocery_list",
-        "description": "Remove a product from the grocery list by its product ID.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "product_id": {
-                    "type": "string",
-                    "description": "The product ID to remove"
-                }
-            },
-            "required": ["product_id"]
+        "type": "function",
+        "function": {
+            "name": "remove_from_grocery_list",
+            "description": "Remove a product from the grocery list by its product ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "description": "The product ID to remove"
+                    }
+                },
+                "required": ["product_id"]
+            }
         }
     },
     {
-        "name": "set_budget",
-        "description": "Set the budget limit for the grocery list in Danish kroner (kr).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "number",
-                    "description": "Budget amount in kr"
-                }
-            },
-            "required": ["amount"]
+        "type": "function",
+        "function": {
+            "name": "set_budget",
+            "description": "Set the budget limit for the grocery list in Danish kroner (kr).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "amount": {
+                        "type": "number",
+                        "description": "Budget amount in kr"
+                    }
+                },
+                "required": ["amount"]
+            }
         }
     },
     {
-        "name": "clear_grocery_list",
-        "description": "Clear all items from the grocery list. Use with caution.",
-        "input_schema": {
-            "type": "object",
-            "properties": {}
+        "type": "function",
+        "function": {
+            "name": "clear_grocery_list",
+            "description": "Clear all items from the grocery list. Use with caution.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
         }
     }
 ]
+
+
+def _budget_bar(total: float, budget: float) -> str:
+    """Render a budget progress bar for the terminal."""
+    pct = (total / budget * 100) if budget > 0 else 0
+    bar_width = 20
+    filled = int(bar_width * min(pct, 100) / 100)
+    empty = bar_width - filled
+    if pct > 100:
+        color = "\033[91m"  # red
+    elif pct > 80:
+        color = "\033[93m"  # yellow
+    else:
+        color = "\033[92m"  # green
+    reset = "\033[0m"
+    bar = f"{color}{'█' * filled}{'░' * empty}{reset}"
+    return f"  [{bar}] {total:.0f} / {budget:.0f} kr ({pct:.0f}%)"
 
 
 def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -> str:
@@ -1429,11 +1763,11 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
     try:
         if tool_name == "search_products":
             query = tool_input["query"]
-            limit = tool_input.get("limit", 5)
+            limit = tool_input.get("limit", 10)
             products = search_products(auth, query, limit=limit)
 
             if not products:
-                return f"No products found for '{query}'"
+                return f"No products found for '{query}'. Try a simpler/different Danish search term, or increase the limit."
 
             results = []
             for p in products:
@@ -1449,7 +1783,11 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
                     f"- ID: {pid} | {name} ({brand}) | {price:.2f} kr | {unit_price} | {stock}"
                 )
 
-            return f"Found {len(products)} products for '{query}':\n" + "\n".join(results)
+            header = f"Found {len(products)} products for '{query}':\n"
+            hint = ""
+            if len(products) == limit:
+                hint = f"\n(Showing {limit} results — increase limit to see more)"
+            return header + "\n".join(results) + hint
 
         elif tool_name == "add_to_grocery_list":
             product_id = str(tool_input["product_id"])
@@ -1468,6 +1806,9 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
                 if str(item["product_id"]) == product_id:
                     item["quantity"] += quantity
                     save_grocery_list(data)
+                    total = sum(i["unit_price"] * i["quantity"] for i in data["items"])
+                    print(f"  \033[92m  + {item['name']} x{item['quantity']}\033[0m")
+                    print(_budget_bar(total, data["budget"]))
                     return f"Updated quantity: {item['name']} x{item['quantity']} (was x{item['quantity'] - quantity})"
 
             # Add new item
@@ -1482,6 +1823,8 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
             save_grocery_list(data)
 
             total = sum(i["unit_price"] * i["quantity"] for i in data["items"])
+            print(f"  \033[92m  + {new_item['name']} x{quantity} ({new_item['unit_price']:.2f} kr)\033[0m")
+            print(_budget_bar(total, data["budget"]))
             return f"Added: {new_item['name']} x{quantity} ({new_item['unit_price']:.2f} kr each)\nList total: {total:.2f} kr / Budget: {data['budget']:.2f} kr"
 
         elif tool_name == "view_grocery_list":
@@ -1513,6 +1856,9 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
                 if str(item["product_id"]) == product_id:
                     removed = data["items"].pop(i)
                     save_grocery_list(data)
+                    total = sum(i["unit_price"] * i["quantity"] for i in data["items"])
+                    print(f"  \033[91m  - {removed['name']}\033[0m")
+                    print(_budget_bar(total, data["budget"]))
                     return f"Removed: {removed['name']} x{removed['quantity']}"
 
             return f"Product {product_id} not found in grocery list"
@@ -1522,6 +1868,9 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
             data = load_grocery_list()
             data["budget"] = amount
             save_grocery_list(data)
+            total = sum(i["unit_price"] * i["quantity"] for i in data["items"])
+            print(f"  \033[93m  Budget set to {amount:.0f} kr\033[0m")
+            print(_budget_bar(total, amount))
             return f"Budget set to {amount:.2f} kr"
 
         elif tool_name == "clear_grocery_list":
@@ -1538,67 +1887,347 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
         return f"Error executing {tool_name}: {e}"
 
 
-MEAL_PLAN_SYSTEM_PROMPT = """You are a helpful Danish grocery shopping assistant for nemlig.com. You help users plan their meals for the week and build a grocery list.
+def _format_markdown(text: str) -> str:
+    """Convert markdown to ANSI-styled terminal output."""
+    lines = text.split("\n")
+    result = []
+    bold = "\033[1m"
+    dim = "\033[2m"
+    cyan = "\033[96m"
+    reset = "\033[0m"
+    for line in lines:
+        # Headers: ### / ## / #
+        stripped = line.lstrip()
+        if stripped.startswith("### "):
+            result.append(f"  {bold}{stripped[4:]}{reset}")
+        elif stripped.startswith("## "):
+            result.append(f"  {bold}{cyan}{stripped[3:]}{reset}")
+        elif stripped.startswith("# "):
+            result.append(f"  {bold}{cyan}{stripped[2:]}{reset}")
+        else:
+            # Bold: **text**
+            formatted = re.sub(r'\*\*(.+?)\*\*', rf'{bold}\1{reset}', line)
+            # Italic: *text* (but not inside bold)
+            formatted = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', rf'{dim}\1{reset}', formatted)
+            # Bullet points
+            if formatted.lstrip().startswith("- "):
+                indent = len(formatted) - len(formatted.lstrip())
+                content = formatted.lstrip()[2:]
+                formatted = " " * indent + f"  {dim}•{reset} {content}"
+            result.append(formatted)
+    return "\n".join(result)
 
-Your capabilities:
-- Search for products on nemlig.com
-- Add products to the user's grocery list
-- View and manage the grocery list
-- Set a budget and help users stay within it
 
-Guidelines:
-- Always search for products before adding them to understand what's available
-- Consider the user's budget when making suggestions
-- Prioritize essential ingredients for recipes over nice-to-haves
-- When the user mentions a recipe or meal, think about all ingredients needed
-- Products are priced in Danish kroner (kr)
-- Be concise but helpful in your responses
-- If a product isn't available, suggest alternatives
-- When adding multiple items, add them one at a time to ensure accuracy
+_DIET_OPTIONS = [
+    "No restrictions",
+    "Vegetarian",
+    "Vegan",
+    "Pescatarian",
+    "Keto / low-carb",
+]
 
-When the user describes meals or recipes they want to make:
-1. First, understand all the ingredients needed
-2. Search for each ingredient to find the best options
-3. Consider price and availability
-4. Add items to the list, prioritizing by importance to the recipes
-5. Keep track of the budget and warn if getting close to the limit"""
+_MEAL_OPTIONS = [
+    "Breakfast + Lunch + Dinner",
+    "Lunch + Dinner",
+    "Dinner only",
+]
 
 
-def meal_plan_chat(auth: AuthTokens) -> int:
-    """Run the AI meal planning chat interface."""
-    if not ANTHROPIC_AVAILABLE:
-        print("\n  Error: anthropic package not installed.")
-        print("  Run: uv add anthropic")
+def _meal_plan_survey() -> dict:
+    """Run an interactive survey to collect meal planning preferences.
+
+    Returns a dict with keys: diet, allergies, people, meals, days, budget, extra.
+    Raises EOFError/KeyboardInterrupt if the user cancels.
+    """
+    print("\n  🍽️  Meal Planner — Setup")
+    print("  ─────────────────────────────────────\n")
+
+    # --- Diet ---
+    print("  Diet")
+    for i, opt in enumerate(_DIET_OPTIONS, 1):
+        print(f"    [{i}] {opt}")
+    raw = input("  Choice (1): ").strip()
+    diet_idx = int(raw) if raw.isdigit() and 1 <= int(raw) <= len(_DIET_OPTIONS) else 1
+    diet = _DIET_OPTIONS[diet_idx - 1]
+    print()
+
+    # --- Allergies ---
+    allergies = input("  Allergies? (comma-separated, or Enter for none)\n  : ").strip()
+    if not allergies:
+        allergies = "None"
+    print()
+
+    # --- People ---
+    raw = input("  How many people? (1): ").strip()
+    people = int(raw) if raw.isdigit() and int(raw) > 0 else 1
+    print()
+
+    # --- Meals per day ---
+    print("  Meals per day")
+    for i, opt in enumerate(_MEAL_OPTIONS, 1):
+        print(f"    [{i}] {opt}")
+    raw = input("  Choice (1): ").strip()
+    meal_idx = int(raw) if raw.isdigit() and 1 <= int(raw) <= len(_MEAL_OPTIONS) else 1
+    meals = _MEAL_OPTIONS[meal_idx - 1]
+    print()
+
+    # --- Days ---
+    raw = input("  How many days? (7): ").strip()
+    days = int(raw) if raw.isdigit() and 1 <= int(raw) <= 14 else 7
+    print()
+
+    # --- Budget ---
+    raw = input("  Budget in kr? (500): ").strip()
+    try:
+        budget = float(raw) if raw else 500.0
+    except ValueError:
+        budget = 500.0
+    print()
+
+    # --- Extra ---
+    extra = input("  Anything else? (optional)\n  : ").strip()
+    print()
+
+    return {
+        "diet": diet,
+        "allergies": allergies,
+        "people": people,
+        "meals": meals,
+        "days": days,
+        "budget": budget,
+        "extra": extra,
+    }
+
+
+def _format_survey_message(survey: dict) -> str:
+    """Format survey dict into a structured first message for the LLM."""
+    lines = [
+        "MEAL PLAN REQUEST",
+        f"- Diet: {survey['diet']}",
+        f"- Allergies/restrictions: {survey['allergies']}",
+        f"- People: {survey['people']}",
+        f"- Meals per day: {survey['meals']}",
+        f"- Days: {survey['days']}",
+        f"- Budget: {survey['budget']:.0f} kr",
+    ]
+    if survey.get("extra"):
+        lines.append(f"- Extra preferences: {survey['extra']}")
+    return "\n".join(lines)
+
+
+def _tool_progress_message(tool_name: str, tool_input: dict) -> str:
+    """Return a user-friendly progress line for a tool call."""
+    if tool_name == "search_products":
+        q = tool_input.get("query", "")
+        return f"  \033[96m🔍\033[0m Searching \"{q}\"..."
+    elif tool_name == "add_to_grocery_list":
+        qty = tool_input.get("quantity", 1)
+        pid = tool_input.get("product_id", "?")
+        return f"  \033[92m🛒\033[0m Adding product {pid} x{qty}..."
+    elif tool_name == "remove_from_grocery_list":
+        pid = tool_input.get("product_id", "?")
+        return f"  \033[91m🗑️\033[0m  Removing product {pid}..."
+    elif tool_name == "view_grocery_list":
+        return "  \033[96m📋\033[0m Checking list..."
+    elif tool_name == "set_budget":
+        amt = tool_input.get("amount", "?")
+        return f"  \033[93m💰\033[0m Setting budget to {amt} kr"
+    elif tool_name == "clear_grocery_list":
+        return "  \033[91m🗑️\033[0m  Clearing grocery list..."
+    return f"  \033[90m[{tool_name}]\033[0m"
+
+
+MEAL_PLAN_SYSTEM_PROMPT = """You are a grocery meal planner for nemlig.com (a Danish online grocery store). Always respond in English.
+
+You follow a strict 3-step flow:
+
+STEP 1 — UNDERSTAND
+The user's first message contains structured survey data with their diet, restrictions, number of people, meals per day, number of days, budget, and extra preferences. Parse it carefully. Do NOT ask follow-up questions — all requirements are provided. Scale all quantities to match the number of people and days. Briefly confirm the requirements (one sentence) and immediately move to Step 2.
+
+STEP 2 — SEARCH & BUILD
+Based on the user's requirements, decide on meals for the specified number of days and people. Then IMMEDIATELY:
+- Use search_products to find each ingredient on nemlig.com (search in Danish: "kyllingebryst", "hakket oksekød", "pasta", "ris", "æg", etc.)
+- Pick the best-priced available products
+- Use add_to_grocery_list to add them
+- Do this for ALL ingredients before responding
+- Do NOT list meals or recipes in text yet — just silently search and add everything
+
+STEP 3 — RECEIPT & APPROVAL
+Once all items are added, present a single clean summary with:
+
+1. MEAL PLAN — list each day with the requested meals (adjust days and meal types to match the survey)
+2. GROCERY RECEIPT — list every item, quantity, and price like a receipt:
+     Havregryn (finvalsede) x1         12.95 kr
+     Skyr naturel x2                   49.90 kr
+     Bananer x6                        18.00 kr
+     ...
+     ─────────────────────────────────
+     TOTAL                            488.24 kr
+     BUDGET                           500.00 kr
+     REMAINING                         11.76 kr
+
+3. Ask: "Approve this plan? (yes/no)" — wait for the user to confirm.
+
+If the user says no or wants changes:
+- NEVER use clear_grocery_list. Keep the existing list intact.
+- Only remove specific items with remove_from_grocery_list and add new ones with add_to_grocery_list.
+- Then use view_grocery_list and show an updated receipt.
+If the user says yes, respond with a short confirmation that their list is ready to sync.
+
+IMPORTANT RULES:
+- NEVER use clear_grocery_list after the initial plan is built. Only add/remove individual items when adjusting.
+- Never ask clarifying questions in Step 1. Just start planning and shopping.
+- Always search nemlig.com BEFORE suggesting meals — only suggest what's actually available.
+- Product names on nemlig.com are in Danish, so always search in Danish.
+- Stay within budget unless the user explicitly says it's ok to go over.
+- Use view_grocery_list to check current state before presenting the receipt."""
+
+
+def meal_plan_chat(auth: AuthTokens, cli: bool = False) -> int:
+    """Run the AI meal planning chat interface.
+
+    When *cli* is False (default), an interactive survey collects the
+    user's requirements first and auto-sends them to the LLM.  When True,
+    the original free-text chat is used instead.
+    """
+    if not OPENAI_AVAILABLE and not ANTHROPIC_AVAILABLE:
+        print("\n  Error: No AI SDK installed.")
+        print("  Run: uv add openai   (or: uv add anthropic)")
         return 1
 
-    api_key = get_anthropic_api_key()
-    if not api_key:
-        print("\n  Error: ANTHROPIC_API_KEY not found.")
-        print("  Set it in ~/.config/nemlig/login.json or as environment variable.")
-        print('  Example: {"username": "...", "password": "...", "anthropic_api_key": "sk-ant-..."}')
+    ai_result = get_ai_client()
+    if not ai_result:
+        print("\n  Error: AI provider not configured.")
+        print("  Set AI_PROVIDER and credentials in ~/.config/nemlig/login.json or as environment variables.")
+        print(f"  Supported providers: azure, anthropic, {', '.join(_PROVIDER_REGISTRY)}, custom")
         return 1
 
-    client = anthropic.Anthropic(api_key=api_key)
-    messages = []
+    client, model = ai_result
+    messages = [{"role": "system", "content": MEAL_PLAN_SYSTEM_PROMPT}]
 
-    print("\n  🍽️  AI Meal Planner")
-    print("  ─────────────────────────────────────────────────────")
-    print("  Tell me what meals you want to make this week, and I'll")
-    print("  help you build a grocery list within your budget.")
-    print()
-    print("  Examples:")
-    print("    'I want to make spaghetti bolognese and a chicken salad'")
-    print("    'Set my budget to 500 kr'")
-    print("    'What's on my list so far?'")
-    print()
-    print("  Type 'done' to exit meal planning.")
-    print("  ─────────────────────────────────────────────────────\n")
-
-    # Show current list status
+    # Clear grocery list for fresh planning session
     data = load_grocery_list()
-    total = sum(i["unit_price"] * i["quantity"] for i in data["items"])
-    print(f"  Current list: {len(data['items'])} items | {total:.2f} kr / {data['budget']:.2f} kr budget\n")
+    data["items"] = []
 
+    # ── Survey or CLI chat welcome ──────────────────────────
+    first_message: str | None = None
+
+    if cli:
+        # Original free-text flow
+        save_grocery_list(data)
+        print("\n  🍽️  AI Meal Planner")
+        print("  ─────────────────────────────────────────────────────")
+        print("  Tell me what you want to eat this week and I'll")
+        print("  build your meal plan and shopping list automatically.")
+        print()
+        print("  Just describe your preferences:")
+        print("    'Healthy and filling, I cycle a lot'")
+        print("    'Easy vegetarian meals under 400 kr'")
+        print("    'High protein, minimal cooking'")
+        print()
+        print(f"  Budget: {data['budget']:.0f} kr")
+        print("  ─────────────────────────────────────────────────────\n")
+    else:
+        # Guided survey
+        try:
+            survey = _meal_plan_survey()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n  Exiting meal planner.\n")
+            return 0
+
+        data["budget"] = survey["budget"]
+        save_grocery_list(data)
+
+        first_message = _format_survey_message(survey)
+
+        # Show summary
+        print("  ─────────────────────────────────────────────────────")
+        print(f"  ✓ {survey['diet']} | {survey['people']} people | "
+              f"{survey['days']} days | {survey['meals']}")
+        print(f"  ✓ Budget: {survey['budget']:.0f} kr")
+        if survey["allergies"] != "None":
+            print(f"  ✓ Avoiding: {survey['allergies']}")
+        if survey.get("extra"):
+            print(f"  ✓ {survey['extra']}")
+        print("  ─────────────────────────────────────────────────────")
+        print("\n  Starting meal planning...\n")
+
+    # ── Helper to run one LLM round + tool-call loop ────────────
+    def _run_turn(user_content: str) -> bool:
+        """Send *user_content*, execute tool calls, print response.
+
+        Returns True on success, False on error.
+        """
+        messages.append({"role": "user", "content": user_content})
+
+        spinner = Spinner("Planning meals")
+        spinner.start()
+
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                max_completion_tokens=16384,
+                tools=MEAL_PLAN_TOOLS,
+                messages=messages
+            )
+        except Exception as e:
+            spinner.stop("Error")
+            print(f"\n  Error: {e}\n")
+            messages.pop()
+            return False
+
+        spinner.stop("")
+
+        choice = response.choices[0]
+        while choice.finish_reason == "tool_calls":
+            assistant_msg = choice.message
+            messages.append(assistant_msg)
+
+            for tool_call in assistant_msg.tool_calls:
+                tool_name = tool_call.function.name
+                tool_input = json.loads(tool_call.function.arguments)
+
+                # Friendly progress line
+                print(_tool_progress_message(tool_name, tool_input))
+
+                result = execute_meal_plan_tool(auth, tool_name, tool_input)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result
+                })
+
+            spinner = Spinner("Finding ingredients")
+            spinner.start()
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    max_completion_tokens=16384,
+                    tools=MEAL_PLAN_TOOLS,
+                    messages=messages
+                )
+            except Exception as e:
+                spinner.stop("Error")
+                print(f"\n  Error: {e}\n")
+                return False
+            spinner.stop("")
+            choice = response.choices[0]
+
+        if choice.message.content:
+            text = choice.message.content
+            formatted = _format_markdown(text)
+            indented = "\n".join(f"  {line}" for line in formatted.split("\n"))
+            print(f"\n  \033[96m🤖\033[0m {indented.lstrip()}\n")
+            messages.append({"role": "assistant", "content": text})
+
+        return True
+
+    # ── Auto-send survey as first message ───────────────────────
+    if first_message is not None:
+        if not _run_turn(first_message):
+            return 1
+
+    # ── Chat loop for follow-up adjustments ─────────────────────
     while True:
         try:
             user_input = input("  you> ").strip()
@@ -1613,78 +2242,7 @@ def meal_plan_chat(auth: AuthTokens) -> int:
             print("\n  Exiting meal planner.\n")
             return 0
 
-        messages.append({"role": "user", "content": user_input})
-
-        # Show thinking indicator
-        spinner = Spinner("Thinking")
-        spinner.start()
-
-        try:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                system=MEAL_PLAN_SYSTEM_PROMPT,
-                tools=MEAL_PLAN_TOOLS,
-                messages=messages
-            )
-        except Exception as e:
-            spinner.stop("Error")
-            print(f"\n  Error: {e}\n")
-            messages.pop()  # Remove failed message
-            continue
-
-        spinner.stop("")
-
-        # Process response
-        while response.stop_reason == "tool_use":
-            # Handle tool calls
-            assistant_content = response.content
-            messages.append({"role": "assistant", "content": assistant_content})
-
-            tool_results = []
-            for block in assistant_content:
-                if block.type == "tool_use":
-                    tool_name = block.name
-                    tool_input = block.input
-                    tool_id = block.id
-
-                    print(f"  \033[90m[{tool_name}: {json.dumps(tool_input, ensure_ascii=False)}]\033[0m")
-
-                    result = execute_meal_plan_tool(auth, tool_name, tool_input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_id,
-                        "content": result
-                    })
-
-            messages.append({"role": "user", "content": tool_results})
-
-            # Continue conversation
-            spinner = Spinner("Processing")
-            spinner.start()
-            try:
-                response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=4096,
-                    system=MEAL_PLAN_SYSTEM_PROMPT,
-                    tools=MEAL_PLAN_TOOLS,
-                    messages=messages
-                )
-            except Exception as e:
-                spinner.stop("Error")
-                print(f"\n  Error: {e}\n")
-                break
-            spinner.stop("")
-
-        # Print final text response
-        for block in response.content:
-            if hasattr(block, "text"):
-                # Indent the response
-                text = block.text
-                indented = "\n".join(f"  {line}" for line in text.split("\n"))
-                print(f"\n  \033[96m🤖\033[0m{indented[2:]}\n")
-
-        messages.append({"role": "assistant", "content": response.content})
+        _run_turn(user_input)
 
     return 0
 
@@ -1711,30 +2269,30 @@ Be thorough - include all ingredients mentioned in recipes. Use Danish names for
 
 
 def extract_ingredients_from_recipes(recipes_text: str) -> list[dict]:
-    """Use Claude to extract ingredients from recipe text."""
-    if not ANTHROPIC_AVAILABLE:
-        raise RuntimeError("anthropic package not installed")
+    """Use AI to extract ingredients from recipe text."""
+    if not OPENAI_AVAILABLE and not ANTHROPIC_AVAILABLE:
+        raise RuntimeError("No AI SDK installed (need openai or anthropic)")
 
-    api_key = get_anthropic_api_key()
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY not configured")
+    ai_result = get_ai_client()
+    if not ai_result:
+        raise RuntimeError("AI provider not configured")
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client, model = ai_result
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4096,
+    response = client.chat.completions.create(
+        model=model,
+        max_completion_tokens=4096,
         messages=[
+            {"role": "system", "content": RECIPE_EXTRACT_PROMPT},
             {
                 "role": "user",
                 "content": f"Extract all ingredients from these meal plans/recipes:\n\n{recipes_text}\n\nRespond with ONLY a JSON array, no other text."
             }
         ],
-        system=RECIPE_EXTRACT_PROMPT
     )
 
     # Parse JSON from response
-    response_text = response.content[0].text.strip()
+    response_text = response.choices[0].message.content.strip()
 
     # Handle markdown code blocks
     if response_text.startswith("```"):
@@ -2295,14 +2853,16 @@ def cmd_fridge_clear() -> int:
 
 def cmd_fridge_suggest(auth: AuthTokens) -> int:
     """Suggest grocery items based on fridge contents using AI."""
-    if not ANTHROPIC_AVAILABLE:
-        print("  Error: Anthropic not available for AI suggestions.")
+    if not OPENAI_AVAILABLE and not ANTHROPIC_AVAILABLE:
+        print("  Error: No AI SDK installed (need openai or anthropic).")
         return 1
 
-    api_key = get_anthropic_api_key()
-    if not api_key:
-        print("  Error: ANTHROPIC_API_KEY not configured.")
+    ai_result = get_ai_client()
+    if not ai_result:
+        print("  Error: AI provider not configured.")
         return 1
+
+    client, model = ai_result
 
     inventory = load_fridge_inventory()
     grocery_list = load_grocery_list()
@@ -2317,13 +2877,14 @@ def cmd_fridge_suggest(auth: AuthTokens) -> int:
 
     print("\n  🤖 Analyzing fridge contents and suggesting items...\n")
 
-    client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{
-            "role": "user",
-            "content": f"""Based on my fridge contents and current grocery list, suggest what I should buy.
+    response = client.chat.completions.create(
+        model=model,
+        max_completion_tokens=1024,
+        messages=[
+            {"role": "system", "content": "You are a helpful Danish grocery shopping assistant. Give practical, concise suggestions."},
+            {
+                "role": "user",
+                "content": f"""Based on my fridge contents and current grocery list, suggest what I should buy.
 
 Fridge contents: {fridge_items}
 Current grocery list: {list_items}
@@ -2336,16 +2897,16 @@ Please suggest:
 
 Keep suggestions practical for a Danish grocery store (nemlig.com).
 Format as a simple bullet list with item names in Danish."""
-        }],
-        system="You are a helpful Danish grocery shopping assistant. Give practical, concise suggestions."
+            }
+        ],
     )
 
     print("  Suggestions based on your fridge:")
     print("  ─────────────────────────────────────────────────────")
-    for block in response.content:
-        if hasattr(block, "text"):
-            for line in block.text.split("\n"):
-                print(f"  {line}")
+    text = response.choices[0].message.content
+    if text:
+        for line in text.split("\n"):
+            print(f"  {line}")
     print("  ─────────────────────────────────────────────────────\n")
 
     return 0
@@ -2684,7 +3245,9 @@ Examples:
     list_sub.add_parser("sync", help="Push list items to nemlig basket")
 
     # Plan command (AI meal planning)
-    subparsers.add_parser("plan", help="🤖 AI meal planner - build grocery list from recipes")
+    plan_parser = subparsers.add_parser("plan", help="🤖 AI meal planner - build grocery list from recipes")
+    plan_parser.add_argument("--cli", action="store_true",
+                             help="Skip survey, use free-text chat instead")
 
     # Import command (Google Form recipes)
     import_parser = subparsers.add_parser("import", help="📋 Import recipes from Google Form/Sheet")
@@ -2738,49 +3301,21 @@ Examples:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # Load credentials if needed
-    auth = None
-    if needs_auth:
-        try:
-            config_creds = load_config_credentials()
-        except (json.JSONDecodeError, ValueError, OSError) as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
+    username = args.username or config_creds.get("username")
+    password = args.password or config_creds.get("password")
 
-        username = args.username or config_creds.get("username")
-        password = args.password or config_creds.get("password")
-
-        if not username or not password:
-            missing = []
-            if not username:
-                missing.append("username")
-            if not password:
-                missing.append("password")
-
-            if CONFIG_FILE.exists() and config_creds:
-                hint = f"Config file {CONFIG_FILE} missing {', '.join(missing)}."
-            elif CONFIG_FILE.exists():
-                hint = f"Config file {CONFIG_FILE} failed to load."
-            else:
-                hint = f"No config file at {CONFIG_FILE}."
-
-            print(
-                f"Error: Missing {' and '.join(missing)}. {hint} "
-                f"Provide via config file or -u/-p options.",
-                file=sys.stderr,
-            )
-            return 1
-
-        try:
-            auth = login(username, password)
-        except requests.exceptions.HTTPError as e:
-            print(f"HTTP Error: {e}", file=sys.stderr)
-            if e.response is not None:
-                print(f"Response: {e.response.text}", file=sys.stderr)
-            return 1
-        except Exception as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
+    if not username or not password:
+        missing = []
+        if not username:
+            missing.append("username")
+        if not password:
+            missing.append("password")
+        print(
+            f"Error: Missing {' and '.join(missing)}. "
+            f"Provide via config file or -u/-p options.",
+            file=sys.stderr,
+        )
+        return 1
 
     try:
         # Authenticate
@@ -2811,7 +3346,7 @@ Examples:
             elif args.list_cmd == "sync":
                 return cmd_list_sync(auth, args)
         elif args.command == "plan":
-            return meal_plan_chat(auth)
+            return meal_plan_chat(auth, cli=args.cli)
         elif args.command == "import":
             return process_form_recipes(auth, args.spreadsheet_id)
         elif args.command == "scan":
