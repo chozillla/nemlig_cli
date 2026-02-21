@@ -1918,15 +1918,134 @@ def _format_markdown(text: str) -> str:
     return "\n".join(result)
 
 
+_DIET_OPTIONS = [
+    "No restrictions",
+    "Vegetarian",
+    "Vegan",
+    "Pescatarian",
+    "Keto / low-carb",
+]
+
+_MEAL_OPTIONS = [
+    "Breakfast + Lunch + Dinner",
+    "Lunch + Dinner",
+    "Dinner only",
+]
+
+
+def _meal_plan_survey() -> dict:
+    """Run an interactive survey to collect meal planning preferences.
+
+    Returns a dict with keys: diet, allergies, people, meals, days, budget, extra.
+    Raises EOFError/KeyboardInterrupt if the user cancels.
+    """
+    print("\n  🍽️  Meal Planner — Setup")
+    print("  ─────────────────────────────────────\n")
+
+    # --- Diet ---
+    print("  Diet")
+    for i, opt in enumerate(_DIET_OPTIONS, 1):
+        print(f"    [{i}] {opt}")
+    raw = input("  Choice (1): ").strip()
+    diet_idx = int(raw) if raw.isdigit() and 1 <= int(raw) <= len(_DIET_OPTIONS) else 1
+    diet = _DIET_OPTIONS[diet_idx - 1]
+    print()
+
+    # --- Allergies ---
+    allergies = input("  Allergies? (comma-separated, or Enter for none)\n  : ").strip()
+    if not allergies:
+        allergies = "None"
+    print()
+
+    # --- People ---
+    raw = input("  How many people? (1): ").strip()
+    people = int(raw) if raw.isdigit() and int(raw) > 0 else 1
+    print()
+
+    # --- Meals per day ---
+    print("  Meals per day")
+    for i, opt in enumerate(_MEAL_OPTIONS, 1):
+        print(f"    [{i}] {opt}")
+    raw = input("  Choice (1): ").strip()
+    meal_idx = int(raw) if raw.isdigit() and 1 <= int(raw) <= len(_MEAL_OPTIONS) else 1
+    meals = _MEAL_OPTIONS[meal_idx - 1]
+    print()
+
+    # --- Days ---
+    raw = input("  How many days? (7): ").strip()
+    days = int(raw) if raw.isdigit() and 1 <= int(raw) <= 14 else 7
+    print()
+
+    # --- Budget ---
+    raw = input("  Budget in kr? (500): ").strip()
+    try:
+        budget = float(raw) if raw else 500.0
+    except ValueError:
+        budget = 500.0
+    print()
+
+    # --- Extra ---
+    extra = input("  Anything else? (optional)\n  : ").strip()
+    print()
+
+    return {
+        "diet": diet,
+        "allergies": allergies,
+        "people": people,
+        "meals": meals,
+        "days": days,
+        "budget": budget,
+        "extra": extra,
+    }
+
+
+def _format_survey_message(survey: dict) -> str:
+    """Format survey dict into a structured first message for the LLM."""
+    lines = [
+        "MEAL PLAN REQUEST",
+        f"- Diet: {survey['diet']}",
+        f"- Allergies/restrictions: {survey['allergies']}",
+        f"- People: {survey['people']}",
+        f"- Meals per day: {survey['meals']}",
+        f"- Days: {survey['days']}",
+        f"- Budget: {survey['budget']:.0f} kr",
+    ]
+    if survey.get("extra"):
+        lines.append(f"- Extra preferences: {survey['extra']}")
+    return "\n".join(lines)
+
+
+def _tool_progress_message(tool_name: str, tool_input: dict) -> str:
+    """Return a user-friendly progress line for a tool call."""
+    if tool_name == "search_products":
+        q = tool_input.get("query", "")
+        return f"  \033[96m🔍\033[0m Searching \"{q}\"..."
+    elif tool_name == "add_to_grocery_list":
+        qty = tool_input.get("quantity", 1)
+        pid = tool_input.get("product_id", "?")
+        return f"  \033[92m🛒\033[0m Adding product {pid} x{qty}..."
+    elif tool_name == "remove_from_grocery_list":
+        pid = tool_input.get("product_id", "?")
+        return f"  \033[91m🗑️\033[0m  Removing product {pid}..."
+    elif tool_name == "view_grocery_list":
+        return "  \033[96m📋\033[0m Checking list..."
+    elif tool_name == "set_budget":
+        amt = tool_input.get("amount", "?")
+        return f"  \033[93m💰\033[0m Setting budget to {amt} kr"
+    elif tool_name == "clear_grocery_list":
+        return "  \033[91m🗑️\033[0m  Clearing grocery list..."
+    return f"  \033[90m[{tool_name}]\033[0m"
+
+
 MEAL_PLAN_SYSTEM_PROMPT = """You are a grocery meal planner for nemlig.com (a Danish online grocery store). Always respond in English.
 
 You follow a strict 3-step flow:
 
 STEP 1 — UNDERSTAND
-The user's first message describes what they want for the week (e.g. "healthy and filling meals, I'm a cyclist", "easy vegetarian meals", "high-protein bodybuilding meals"). Read their requirements carefully. Do NOT ask follow-up questions. Make sensible assumptions (1 person, 7 days, breakfast+lunch+dinner). Briefly confirm what you understood and immediately move to Step 2.
+The user's first message contains structured survey data with their diet, restrictions, number of people, meals per day, number of days, budget, and extra preferences. Parse it carefully. Do NOT ask follow-up questions — all requirements are provided. Scale all quantities to match the number of people and days. Briefly confirm the requirements (one sentence) and immediately move to Step 2.
 
 STEP 2 — SEARCH & BUILD
-Based on the user's wishes, decide on a week of meals. Then IMMEDIATELY:
+Based on the user's requirements, decide on meals for the specified number of days and people. Then IMMEDIATELY:
 - Use search_products to find each ingredient on nemlig.com (search in Danish: "kyllingebryst", "hakket oksekød", "pasta", "ris", "æg", etc.)
 - Pick the best-priced available products
 - Use add_to_grocery_list to add them
@@ -1936,7 +2055,7 @@ Based on the user's wishes, decide on a week of meals. Then IMMEDIATELY:
 STEP 3 — RECEIPT & APPROVAL
 Once all items are added, present a single clean summary with:
 
-1. WEEKLY MEAL PLAN — list each day (Day 1–7) with Breakfast, Lunch, Dinner
+1. MEAL PLAN — list each day with the requested meals (adjust days and meal types to match the survey)
 2. GROCERY RECEIPT — list every item, quantity, and price like a receipt:
      Havregryn (finvalsede) x1         12.95 kr
      Skyr naturel x2                   49.90 kr
@@ -1964,8 +2083,13 @@ IMPORTANT RULES:
 - Use view_grocery_list to check current state before presenting the receipt."""
 
 
-def meal_plan_chat(auth: AuthTokens) -> int:
-    """Run the AI meal planning chat interface."""
+def meal_plan_chat(auth: AuthTokens, cli: bool = False) -> int:
+    """Run the AI meal planning chat interface.
+
+    When *cli* is False (default), an interactive survey collects the
+    user's requirements first and auto-sends them to the LLM.  When True,
+    the original free-text chat is used instead.
+    """
     if not OPENAI_AVAILABLE and not ANTHROPIC_AVAILABLE:
         print("\n  Error: No AI SDK installed.")
         print("  Run: uv add openai   (or: uv add anthropic)")
@@ -1984,21 +2108,126 @@ def meal_plan_chat(auth: AuthTokens) -> int:
     # Clear grocery list for fresh planning session
     data = load_grocery_list()
     data["items"] = []
-    save_grocery_list(data)
 
-    print("\n  🍽️  AI Meal Planner")
-    print("  ─────────────────────────────────────────────────────")
-    print("  Tell me what you want to eat this week and I'll")
-    print("  build your meal plan and shopping list automatically.")
-    print()
-    print("  Just describe your preferences:")
-    print("    'Healthy and filling, I cycle a lot'")
-    print("    'Easy vegetarian meals under 400 kr'")
-    print("    'High protein, minimal cooking'")
-    print()
-    print(f"  Budget: {data['budget']:.0f} kr")
-    print("  ─────────────────────────────────────────────────────\n")
+    # ── Survey or CLI chat welcome ──────────────────────────
+    first_message: str | None = None
 
+    if cli:
+        # Original free-text flow
+        save_grocery_list(data)
+        print("\n  🍽️  AI Meal Planner")
+        print("  ─────────────────────────────────────────────────────")
+        print("  Tell me what you want to eat this week and I'll")
+        print("  build your meal plan and shopping list automatically.")
+        print()
+        print("  Just describe your preferences:")
+        print("    'Healthy and filling, I cycle a lot'")
+        print("    'Easy vegetarian meals under 400 kr'")
+        print("    'High protein, minimal cooking'")
+        print()
+        print(f"  Budget: {data['budget']:.0f} kr")
+        print("  ─────────────────────────────────────────────────────\n")
+    else:
+        # Guided survey
+        try:
+            survey = _meal_plan_survey()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n  Exiting meal planner.\n")
+            return 0
+
+        data["budget"] = survey["budget"]
+        save_grocery_list(data)
+
+        first_message = _format_survey_message(survey)
+
+        # Show summary
+        print("  ─────────────────────────────────────────────────────")
+        print(f"  ✓ {survey['diet']} | {survey['people']} people | "
+              f"{survey['days']} days | {survey['meals']}")
+        print(f"  ✓ Budget: {survey['budget']:.0f} kr")
+        if survey["allergies"] != "None":
+            print(f"  ✓ Avoiding: {survey['allergies']}")
+        if survey.get("extra"):
+            print(f"  ✓ {survey['extra']}")
+        print("  ─────────────────────────────────────────────────────")
+        print("\n  Starting meal planning...\n")
+
+    # ── Helper to run one LLM round + tool-call loop ────────────
+    def _run_turn(user_content: str) -> bool:
+        """Send *user_content*, execute tool calls, print response.
+
+        Returns True on success, False on error.
+        """
+        messages.append({"role": "user", "content": user_content})
+
+        spinner = Spinner("Planning meals")
+        spinner.start()
+
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                max_completion_tokens=16384,
+                tools=MEAL_PLAN_TOOLS,
+                messages=messages
+            )
+        except Exception as e:
+            spinner.stop("Error")
+            print(f"\n  Error: {e}\n")
+            messages.pop()
+            return False
+
+        spinner.stop("")
+
+        choice = response.choices[0]
+        while choice.finish_reason == "tool_calls":
+            assistant_msg = choice.message
+            messages.append(assistant_msg)
+
+            for tool_call in assistant_msg.tool_calls:
+                tool_name = tool_call.function.name
+                tool_input = json.loads(tool_call.function.arguments)
+
+                # Friendly progress line
+                print(_tool_progress_message(tool_name, tool_input))
+
+                result = execute_meal_plan_tool(auth, tool_name, tool_input)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result
+                })
+
+            spinner = Spinner("Finding ingredients")
+            spinner.start()
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    max_completion_tokens=16384,
+                    tools=MEAL_PLAN_TOOLS,
+                    messages=messages
+                )
+            except Exception as e:
+                spinner.stop("Error")
+                print(f"\n  Error: {e}\n")
+                return False
+            spinner.stop("")
+            choice = response.choices[0]
+
+        if choice.message.content:
+            text = choice.message.content
+            formatted = _format_markdown(text)
+            indented = "\n".join(f"  {line}" for line in formatted.split("\n"))
+            print(f"\n  \033[96m🤖\033[0m {indented.lstrip()}\n")
+            messages.append({"role": "assistant", "content": text})
+
+        return True
+
+    # ── Auto-send survey as first message ───────────────────────
+    if first_message is not None:
+        if not _run_turn(first_message):
+            return 1
+
+    # ── Chat loop for follow-up adjustments ─────────────────────
     while True:
         try:
             user_input = input("  you> ").strip()
@@ -2013,71 +2242,7 @@ def meal_plan_chat(auth: AuthTokens) -> int:
             print("\n  Exiting meal planner.\n")
             return 0
 
-        messages.append({"role": "user", "content": user_input})
-
-        # Show thinking indicator
-        spinner = Spinner("Thinking")
-        spinner.start()
-
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                max_completion_tokens=16384,
-                tools=MEAL_PLAN_TOOLS,
-                messages=messages
-            )
-        except Exception as e:
-            spinner.stop("Error")
-            print(f"\n  Error: {e}\n")
-            messages.pop()  # Remove failed message
-            continue
-
-        spinner.stop("")
-
-        # Process response
-        choice = response.choices[0]
-        while choice.finish_reason == "tool_calls":
-            # Handle tool calls
-            assistant_msg = choice.message
-            messages.append(assistant_msg)
-
-            for tool_call in assistant_msg.tool_calls:
-                tool_name = tool_call.function.name
-                tool_input = json.loads(tool_call.function.arguments)
-
-                print(f"  \033[90m[{tool_name}: {json.dumps(tool_input, ensure_ascii=False)}]\033[0m")
-
-                result = execute_meal_plan_tool(auth, tool_name, tool_input)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result
-                })
-
-            # Continue conversation
-            spinner = Spinner("Processing")
-            spinner.start()
-            try:
-                response = client.chat.completions.create(
-                    model=model,
-                    max_completion_tokens=16384,
-                    tools=MEAL_PLAN_TOOLS,
-                    messages=messages
-                )
-            except Exception as e:
-                spinner.stop("Error")
-                print(f"\n  Error: {e}\n")
-                break
-            spinner.stop("")
-            choice = response.choices[0]
-
-        # Print final text response
-        if choice.message.content:
-            text = choice.message.content
-            formatted = _format_markdown(text)
-            indented = "\n".join(f"  {line}" for line in formatted.split("\n"))
-            print(f"\n  \033[96m🤖\033[0m {indented.lstrip()}\n")
-            messages.append({"role": "assistant", "content": text})
+        _run_turn(user_input)
 
     return 0
 
@@ -3080,7 +3245,9 @@ Examples:
     list_sub.add_parser("sync", help="Push list items to nemlig basket")
 
     # Plan command (AI meal planning)
-    subparsers.add_parser("plan", help="🤖 AI meal planner - build grocery list from recipes")
+    plan_parser = subparsers.add_parser("plan", help="🤖 AI meal planner - build grocery list from recipes")
+    plan_parser.add_argument("--cli", action="store_true",
+                             help="Skip survey, use free-text chat instead")
 
     # Import command (Google Form recipes)
     import_parser = subparsers.add_parser("import", help="📋 Import recipes from Google Form/Sheet")
@@ -3179,7 +3346,7 @@ Examples:
             elif args.list_cmd == "sync":
                 return cmd_list_sync(auth, args)
         elif args.command == "plan":
-            return meal_plan_chat(auth)
+            return meal_plan_chat(auth, cli=args.cli)
         elif args.command == "import":
             return process_form_recipes(auth, args.spreadsheet_id)
         elif args.command == "scan":
