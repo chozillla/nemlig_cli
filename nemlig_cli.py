@@ -15,6 +15,7 @@ CLI options override the config file.
 """
 
 import argparse
+import curses
 import itertools
 import json
 import os
@@ -1926,74 +1927,269 @@ _DIET_OPTIONS = [
     "Keto / low-carb",
 ]
 
-_MEAL_OPTIONS = [
-    "Breakfast + Lunch + Dinner",
-    "Lunch + Dinner",
-    "Dinner only",
+_ALLERGY_OPTIONS = [
+    "Lactose",
+    "Gluten",
+    "Nuts",
+    "Shellfish",
+    "Eggs",
+    "Soy",
 ]
+
+_ORGANIC_OPTIONS = [
+    "Always organic",
+    "Prefer organic",
+    "No preference",
+]
+
+_COOKING_OPTIONS = [
+    "Quick (under 20 min)",
+    "Medium (under 45 min)",
+    "No limit",
+]
+
+_CUISINE_OPTIONS = [
+    "Mixed / no preference",
+    "Mediterranean",
+    "Nordic",
+    "Asian",
+    "Mexican / Latin",
+]
+
+_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+_MEALS = ["Breakfast", "Lunch", "Dinner"]
+
+
+def _pick_one(label: str, options: list[str], default: int = 1) -> str:
+    """Print numbered options, return the selected string."""
+    print(f"  {label}")
+    for i, opt in enumerate(options, 1):
+        print(f"    [{i}] {opt}")
+    raw = input(f"  Choice ({default}): ").strip()
+    idx = int(raw) if raw.isdigit() and 1 <= int(raw) <= len(options) else default
+    chosen = options[idx - 1]
+    print(f"  \u2192 {chosen}\n")
+    return chosen
+
+
+def _pick_many(label: str, options: list[str]) -> list[str]:
+    """Print numbered options, allow comma-separated multi-select, return list."""
+    print(f"  {label}")
+    for i, opt in enumerate(options, 1):
+        print(f"    [{i}] {opt}")
+    raw = input("  Choices (comma-separated, or Enter for none): ").strip()
+    if not raw:
+        print("  \u2192 None\n")
+        return []
+    selected = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit() and 1 <= int(part) <= len(options):
+            selected.append(options[int(part) - 1])
+    if selected:
+        print(f"  \u2192 {', '.join(selected)}\n")
+    else:
+        print("  \u2192 None\n")
+    return selected
+
+
+def _meal_grid_inner(stdscr) -> dict[str, list[str]]:
+    """Curses inner function: interactive 7x3 meal toggle grid."""
+    # State: 7 days x 3 meals, all checked by default
+    grid = [[True] * len(_MEALS) for _ in range(len(_DAYS))]
+    cursor_row, cursor_col = 0, 0
+
+    curses.curs_set(0)
+    curses.start_color()
+    curses.use_default_colors()
+    curses.init_pair(1, curses.COLOR_GREEN, -1)    # checked
+    curses.init_pair(2, curses.COLOR_WHITE, -1)    # unchecked
+    curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_CYAN)  # cursor
+    curses.init_pair(4, curses.COLOR_CYAN, -1)     # title
+    curses.init_pair(5, curses.COLOR_YELLOW, -1)   # shortcuts
+
+    DAY_W = 14
+    MEAL_W = 12
+    TITLE_ROW = 1
+    HELP_ROW = 2
+    COL_HDR_ROW = 4
+    GRID_ROW = 5
+    FOOTER_ROW = GRID_ROW + len(_DAYS) + 1
+    warn_msg = ""
+
+    while True:
+        stdscr.erase()
+
+        # Title
+        stdscr.addstr(TITLE_ROW, 2, "Weekly Meal Schedule",
+                      curses.color_pair(4) | curses.A_BOLD)
+
+        # Help
+        stdscr.addstr(HELP_ROW, 2,
+                      "Arrow keys: move  |  Space: toggle  |  Enter: confirm",
+                      curses.A_DIM)
+
+        # Column headers
+        x_off = DAY_W + 2
+        for j, meal in enumerate(_MEALS):
+            stdscr.addstr(COL_HDR_ROW, x_off + j * MEAL_W,
+                          meal.center(MEAL_W),
+                          curses.A_BOLD | curses.A_UNDERLINE)
+
+        # Grid rows
+        for i, day in enumerate(_DAYS):
+            y = GRID_ROW + i
+            day_attr = curses.A_BOLD if i == cursor_row else 0
+            stdscr.addstr(y, 2, day.ljust(DAY_W), day_attr)
+
+            for j in range(len(_MEALS)):
+                x = x_off + j * MEAL_W
+                checked = grid[i][j]
+                symbol = " \u2713 " if checked else " \u00b7 "
+
+                if i == cursor_row and j == cursor_col:
+                    attr = curses.color_pair(3) | curses.A_BOLD
+                elif checked:
+                    attr = curses.color_pair(1) | curses.A_BOLD
+                else:
+                    attr = curses.color_pair(2) | curses.A_DIM
+
+                stdscr.addstr(y, x, symbol.center(MEAL_W), attr)
+
+        # Shortcuts
+        stdscr.addstr(FOOTER_ROW + 1, 2,
+                      "[a] All  [n] None  [w] Weekday dinners  [f] Full weekends",
+                      curses.color_pair(5))
+
+        # Warning (if any)
+        if warn_msg:
+            stdscr.addstr(FOOTER_ROW + 3, 2, warn_msg,
+                          curses.color_pair(1) | curses.A_BOLD)
+
+        stdscr.refresh()
+        key = stdscr.getch()
+        warn_msg = ""
+
+        if key == curses.KEY_UP:
+            cursor_row = (cursor_row - 1) % len(_DAYS)
+        elif key == curses.KEY_DOWN:
+            cursor_row = (cursor_row + 1) % len(_DAYS)
+        elif key == curses.KEY_LEFT:
+            cursor_col = (cursor_col - 1) % len(_MEALS)
+        elif key == curses.KEY_RIGHT:
+            cursor_col = (cursor_col + 1) % len(_MEALS)
+        elif key == ord(" "):
+            grid[cursor_row][cursor_col] = not grid[cursor_row][cursor_col]
+        elif key in (curses.KEY_ENTER, 10, 13):
+            # Validate: at least one meal selected
+            if not any(grid[i][j] for i in range(len(_DAYS)) for j in range(len(_MEALS))):
+                warn_msg = "Select at least one meal!"
+                continue
+            break
+        elif key == ord("a"):
+            for i in range(len(_DAYS)):
+                for j in range(len(_MEALS)):
+                    grid[i][j] = True
+        elif key == ord("n"):
+            for i in range(len(_DAYS)):
+                for j in range(len(_MEALS)):
+                    grid[i][j] = False
+        elif key == ord("w"):
+            for i in range(5):  # Mon-Fri
+                grid[i][0] = False  # Breakfast off
+                grid[i][1] = False  # Lunch off
+                grid[i][2] = True   # Dinner on
+        elif key == ord("f"):
+            for j in range(len(_MEALS)):  # Sat + Sun all on
+                grid[5][j] = True
+                grid[6][j] = True
+
+    # Build result — omit days with no meals
+    schedule: dict[str, list[str]] = {}
+    for i, day in enumerate(_DAYS):
+        selected = [_MEALS[j] for j in range(len(_MEALS)) if grid[i][j]]
+        if selected:
+            schedule[day] = selected
+    return schedule
+
+
+def _meal_grid_picker() -> dict[str, list[str]]:
+    """Show an interactive curses grid for selecting meals per day.
+
+    Returns a dict mapping day names to lists of selected meal names.
+    Falls back to all meals on all days if not running in a terminal.
+    """
+    if not sys.stdout.isatty():
+        return {day: list(_MEALS) for day in _DAYS}
+    return curses.wrapper(_meal_grid_inner)
 
 
 def _meal_plan_survey() -> dict:
     """Run an interactive survey to collect meal planning preferences.
 
-    Returns a dict with keys: diet, allergies, people, meals, days, budget, extra.
+    Returns a dict with keys: diet, allergies, people, schedule, organic,
+    cooking, cuisine, budget, extra.
     Raises EOFError/KeyboardInterrupt if the user cancels.
     """
     print("\n  🍽️  Meal Planner — Setup")
     print("  ─────────────────────────────────────\n")
 
-    # --- Diet ---
-    print("  Diet")
-    for i, opt in enumerate(_DIET_OPTIONS, 1):
-        print(f"    [{i}] {opt}")
-    raw = input("  Choice (1): ").strip()
-    diet_idx = int(raw) if raw.isdigit() and 1 <= int(raw) <= len(_DIET_OPTIONS) else 1
-    diet = _DIET_OPTIONS[diet_idx - 1]
-    print()
+    # 1. Diet
+    diet = _pick_one("Diet", _DIET_OPTIONS)
 
-    # --- Allergies ---
-    allergies = input("  Allergies? (comma-separated, or Enter for none)\n  : ").strip()
-    if not allergies:
-        allergies = "None"
-    print()
+    # 2. Allergies (multi-select from common + free text)
+    allergies = _pick_many("Allergies / intolerances", _ALLERGY_OPTIONS)
+    other_allergy = input("  Other allergies? (or Enter to skip): ").strip()
+    if other_allergy:
+        allergies.append(other_allergy)
+        print(f"  \u2192 Added: {other_allergy}\n")
+    else:
+        print()
 
-    # --- People ---
+    # 3. People
     raw = input("  How many people? (1): ").strip()
     people = int(raw) if raw.isdigit() and int(raw) > 0 else 1
-    print()
+    print(f"  \u2192 {people} {'person' if people == 1 else 'people'}\n")
 
-    # --- Meals per day ---
-    print("  Meals per day")
-    for i, opt in enumerate(_MEAL_OPTIONS, 1):
-        print(f"    [{i}] {opt}")
-    raw = input("  Choice (1): ").strip()
-    meal_idx = int(raw) if raw.isdigit() and 1 <= int(raw) <= len(_MEAL_OPTIONS) else 1
-    meals = _MEAL_OPTIONS[meal_idx - 1]
-    print()
+    # 4. Meal grid (curses)
+    print("  Opening weekly meal picker...\n")
+    schedule = _meal_grid_picker()
+    total_meals = sum(len(m) for m in schedule.values())
+    active_days = len(schedule)
+    print(f"  \u2192 {active_days} days, {total_meals} meals/week\n")
 
-    # --- Days ---
-    raw = input("  How many days? (7): ").strip()
-    days = int(raw) if raw.isdigit() and 1 <= int(raw) <= 14 else 7
-    print()
+    # 5. Organic
+    organic = _pick_one("Organic preference", _ORGANIC_OPTIONS, default=3)
 
-    # --- Budget ---
+    # 6. Cooking time
+    cooking = _pick_one("Cooking time per meal", _COOKING_OPTIONS, default=2)
+
+    # 7. Cuisine
+    cuisine = _pick_one("Cuisine style", _CUISINE_OPTIONS)
+
+    # 8. Budget
     raw = input("  Budget in kr? (500): ").strip()
     try:
         budget = float(raw) if raw else 500.0
     except ValueError:
         budget = 500.0
-    print()
+    print(f"  \u2192 {budget:.0f} kr\n")
 
-    # --- Extra ---
-    extra = input("  Anything else? (optional)\n  : ").strip()
-    print()
+    # 9. Extra notes (optional)
+    extra = input("  Any other notes? (optional, Enter to skip)\n  : ").strip()
+    if extra:
+        print(f"  \u2192 {extra}\n")
+    else:
+        print()
 
     return {
         "diet": diet,
         "allergies": allergies,
         "people": people,
-        "meals": meals,
-        "days": days,
+        "schedule": schedule,
+        "organic": organic,
+        "cooking": cooking,
+        "cuisine": cuisine,
         "budget": budget,
         "extra": extra,
     }
@@ -2001,17 +2197,24 @@ def _meal_plan_survey() -> dict:
 
 def _format_survey_message(survey: dict) -> str:
     """Format survey dict into a structured first message for the LLM."""
+    allergy_str = ", ".join(survey["allergies"]) if survey["allergies"] else "None"
     lines = [
         "MEAL PLAN REQUEST",
         f"- Diet: {survey['diet']}",
-        f"- Allergies/restrictions: {survey['allergies']}",
+        f"- Allergies/restrictions: {allergy_str}",
         f"- People: {survey['people']}",
-        f"- Meals per day: {survey['meals']}",
-        f"- Days: {survey['days']}",
-        f"- Budget: {survey['budget']:.0f} kr",
+        "- Schedule:",
     ]
+    for day in _DAYS:
+        meals = survey["schedule"].get(day, [])
+        if meals:
+            lines.append(f"    {day}: {', '.join(meals)}")
+    lines.append(f"- Organic: {survey['organic']}")
+    lines.append(f"- Cooking time: {survey['cooking']}")
+    lines.append(f"- Cuisine: {survey['cuisine']}")
+    lines.append(f"- Budget: {survey['budget']:.0f} kr")
     if survey.get("extra"):
-        lines.append(f"- Extra preferences: {survey['extra']}")
+        lines.append(f"- Extra notes: {survey['extra']}")
     return "\n".join(lines)
 
 
@@ -2042,10 +2245,10 @@ MEAL_PLAN_SYSTEM_PROMPT = """You are a grocery meal planner for nemlig.com (a Da
 You follow a strict 3-step flow:
 
 STEP 1 — UNDERSTAND
-The user's first message contains structured survey data with their diet, restrictions, number of people, meals per day, number of days, budget, and extra preferences. Parse it carefully. Do NOT ask follow-up questions — all requirements are provided. Scale all quantities to match the number of people and days. Briefly confirm the requirements (one sentence) and immediately move to Step 2.
+The user's first message contains structured survey data with their diet, restrictions, number of people, weekly meal schedule (which specific meals on which days), organic preference, cooking time limit, cuisine style, budget, and extra notes. Parse it carefully. Do NOT ask follow-up questions — all requirements are provided. Scale all quantities to match the number of people. Briefly confirm the requirements (one sentence) and immediately move to Step 2.
 
 STEP 2 — SEARCH & BUILD
-Based on the user's requirements, decide on meals for the specified number of days and people. Then IMMEDIATELY:
+Based on the user's requirements, decide on meals matching the user's weekly schedule (only plan the specific meals listed for each day). Then IMMEDIATELY:
 - Use search_products to find each ingredient on nemlig.com (search in Danish: "kyllingebryst", "hakket oksekød", "pasta", "ris", "æg", etc.)
 - Pick the best-priced available products
 - Use add_to_grocery_list to add them
@@ -2055,7 +2258,7 @@ Based on the user's requirements, decide on meals for the specified number of da
 STEP 3 — RECEIPT & APPROVAL
 Once all items are added, present a single clean summary with:
 
-1. MEAL PLAN — list each day with the requested meals (adjust days and meal types to match the survey)
+1. MEAL PLAN — list each day with the specific meals from the schedule (only include days and meal types the user selected)
 2. GROCERY RECEIPT — list every item, quantity, and price like a receipt:
      Havregryn (finvalsede) x1         12.95 kr
      Skyr naturel x2                   49.90 kr
@@ -2080,7 +2283,10 @@ IMPORTANT RULES:
 - Always search nemlig.com BEFORE suggesting meals — only suggest what's actually available.
 - Product names on nemlig.com are in Danish, so always search in Danish.
 - Stay within budget unless the user explicitly says it's ok to go over.
-- Use view_grocery_list to check current state before presenting the receipt."""
+- Use view_grocery_list to check current state before presenting the receipt.
+- Respect the organic preference: if "Always organic", only pick organic products. If "Prefer organic", pick organic when available at a similar price.
+- Respect cooking time limits: if "Quick (under 20 min)", only suggest meals that are fast to prepare.
+- Follow the cuisine style preference when choosing meals."""
 
 
 def meal_plan_chat(auth: AuthTokens, cli: bool = False) -> int:
@@ -2141,12 +2347,15 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False) -> int:
         first_message = _format_survey_message(survey)
 
         # Show summary
+        total_meals = sum(len(m) for m in survey["schedule"].values())
+        active_days = len(survey["schedule"])
         print("  ─────────────────────────────────────────────────────")
         print(f"  ✓ {survey['diet']} | {survey['people']} people | "
-              f"{survey['days']} days | {survey['meals']}")
+              f"{active_days} days, {total_meals} meals/week")
         print(f"  ✓ Budget: {survey['budget']:.0f} kr")
-        if survey["allergies"] != "None":
-            print(f"  ✓ Avoiding: {survey['allergies']}")
+        print(f"  ✓ {survey['organic']} | {survey['cooking']} | {survey['cuisine']}")
+        if survey["allergies"]:
+            print(f"  ✓ Avoiding: {', '.join(survey['allergies'])}")
         if survey.get("extra"):
             print(f"  ✓ {survey['extra']}")
         print("  ─────────────────────────────────────────────────────")
