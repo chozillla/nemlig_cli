@@ -24,7 +24,7 @@ CADDY_SHARE="caddydata"
 CONTAINER_GROUP="n8n"
 DNS_LABEL="nemlig-n8n"            # Your instance will be at: nemlig-n8n.northeurope.azurecontainer.io
 N8N_ENCRYPTION_KEY=""             # Set this! Used to encrypt credentials in n8n
-MEAL_PLANNER_TOKEN="1562350ad8f574eccf3b8753583c6b89"  # Secret token for meal planner access
+MEAL_PLANNER_TOKEN="${MEAL_PLANNER_TOKEN:-$(openssl rand -hex 16)}"  # Set via env or auto-generate
 
 # ---- Derived ----
 FQDN="$DNS_LABEL.$LOCATION.azurecontainer.io"
