@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meal Planner</title>
+<style>
+:root {
+  --green: #1a7f37;
+  --green-hover: #166b2e;
+  --green-bg: #dafbe1;
+  --red: #cf222e;
+  --red-bg: #ffebe9;
+  --text: #1f2328;
+  --muted: #656d76;
+  --bg: #f6f8fa;
+  --card: #ffffff;
+  --border: #d0d7de;
+  --radius: 16px;
+  --shadow: 0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100dvh; display: flex; justify-content: center;
+  padding: 2rem 1rem; line-height: 1.5;
+}
+.container { max-width: 480px; width: 100%; }
+
+/* ── Header ─────────────────── */
+header { text-align: center; margin-bottom: 2rem; }
+header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+header .sub { color: var(--muted); font-size: 0.875rem; margin-top: 0.25rem; }
+
+/* ── Card ───────────────────── */
+.card {
+  background: var(--card); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 2rem;
+  position: relative; overflow: hidden;
+}
+
+/* ── Animations ─────────────── */
+.step { animation: slideUp 0.3s ease; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes stagger { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Form elements ──────────── */
+.question { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.25rem; }
+.hint { color: var(--muted); font-size: 0.8125rem; margin-bottom: 1rem; }
+
+textarea, input[type="text"], input[type="number"] {
+  width: 100%; padding: 0.75rem 1rem;
+  border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 1rem; font-family: inherit;
+  background: var(--bg); color: var(--text);
+  transition: border-color 0.15s; outline: none;
+}
+textarea:focus, input:focus { border-color: var(--green); }
+textarea { resize: vertical; min-height: 100px; }
+
+/* ── Stepper ────────────────── */
+.stepper { display: flex; align-items: center; gap: 1.5rem; justify-content: center; margin: 1.5rem 0; }
+.stepper button {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: var(--card);
+  font-size: 1.5rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; color: var(--text);
+}
+.stepper button:hover { border-color: var(--green); color: var(--green); }
+.stepper .value { font-size: 3rem; font-weight: 700; min-width: 3ch; text-align: center; }
+
+/* ── Day pills ──────────────── */
+.pills { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+.pill {
+  padding: 0.5rem 1rem; border-radius: 99px;
+  border: 1.5px solid var(--border); background: var(--card);
+  cursor: pointer; font-size: 0.9375rem; font-weight: 500;
+  transition: all 0.15s; user-select: none;
+}
+.pill:hover { border-color: var(--green); }
+.pill.selected { background: var(--green); color: white; border-color: var(--green); }
+
+/* ── Diet chips ─────────────── */
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.chip {
+  padding: 0.375rem 0.875rem; border-radius: 99px;
+  border: 1.5px solid var(--border); background: var(--card);
+  cursor: pointer; font-size: 0.8125rem; font-weight: 500;
+  transition: all 0.15s; user-select: none;
+}
+.chip:hover { border-color: var(--green); }
+.chip.selected { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+
+/* ── Budget ─────────────────── */
+.budget-input {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 2rem; font-weight: 700; justify-content: center; margin: 1.5rem 0;
+}
+.budget-input input {
+  width: 5ch; text-align: center; font-size: 2rem; font-weight: 700;
+  border: none; border-bottom: 2px solid var(--border); border-radius: 0;
+  background: transparent; padding: 0.25rem;
+}
+.budget-input input:focus { border-bottom-color: var(--green); }
+.budget-input span { color: var(--muted); }
+
+/* ── Buttons ────────────────── */
+.actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+.btn {
+  flex: 1; padding: 0.75rem 1.5rem; border-radius: 10px;
+  font-size: 1rem; font-weight: 600; cursor: pointer;
+  border: none; transition: all 0.15s; font-family: inherit;
+}
+.btn-primary { background: var(--green); color: white; }
+.btn-primary:hover { background: var(--green-hover); }
+.btn-secondary { background: transparent; color: var(--muted); border: 1.5px solid var(--border); }
+.btn-secondary:hover { color: var(--text); border-color: var(--text); }
+.btn-danger { background: transparent; color: var(--red); border: 1.5px solid var(--border); }
+.btn-danger:hover { background: var(--red-bg); border-color: var(--red); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-text { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.875rem; padding: 0.5rem; }
+.btn-text:hover { color: var(--text); }
+
+/* ── Progress bar ──────────── */
+.progress-bar {
+  display: flex; gap: 0.375rem; justify-content: center; margin-top: 1.5rem;
+}
+.prog-seg {
+  height: 4px; border-radius: 2px; flex: 1;
+  background: var(--border); transition: background 0.3s;
+}
+.prog-seg.active { background: var(--green); }
+.prog-seg.done { background: var(--green); }
+
+/* ── Review summary ─────────── */
+.review-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
+  margin: 1rem 0; font-size: 0.875rem;
+}
+.review-item { background: var(--bg); border-radius: 8px; padding: 0.625rem 0.75rem; }
+.review-label { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.125rem; }
+.review-value { font-weight: 600; }
+.review-full { grid-column: 1 / -1; }
+
+/* ── Pipeline steps ────────── */
+.pipeline { text-align: left; padding: 0.5rem 0; }
+.pipe-step {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 0.5rem 0; position: relative;
+  opacity: 0.3; transition: opacity 0.4s;
+}
+.pipe-step.active, .pipe-step.done { opacity: 1; }
+.pipe-icon {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; flex-shrink: 0;
+  border: 2px solid var(--border); background: var(--card);
+  transition: all 0.4s;
+}
+.pipe-step.active .pipe-icon {
+  border-color: var(--green); color: var(--green);
+  animation: pulse-ring 1.5s ease infinite;
+}
+.pipe-step.done .pipe-icon {
+  border-color: var(--green); background: var(--green); color: white;
+}
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(26,127,55,0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(26,127,55,0); }
+}
+.pipe-body { flex: 1; min-width: 0; }
+.pipe-title { font-size: 0.8125rem; font-weight: 600; color: var(--text); }
+.pipe-step:not(.active):not(.done) .pipe-title { color: var(--muted); }
+.pipe-detail {
+  font-size: 0.6875rem; color: var(--muted); margin-top: 0.125rem;
+  max-height: 0; overflow: hidden; transition: max-height 0.4s, opacity 0.3s; opacity: 0;
+}
+.pipe-step.active .pipe-detail { max-height: 3rem; opacity: 1; }
+.pipe-step.done .pipe-detail { max-height: 3rem; opacity: 0.6; }
+.pipe-connector {
+  position: absolute; left: 13px; top: 36px; bottom: -6px;
+  width: 2px; background: var(--border);
+}
+.pipe-step:last-child .pipe-connector { display: none; }
+.pipe-step.done .pipe-connector { background: var(--green); }
+
+/* ── Results ────────────────── */
+.results { animation: fadeIn 0.4s ease; }
+.summary-card {
+  background: var(--green-bg); border-radius: 12px;
+  padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+  display: flex; justify-content: space-around; text-align: center;
+  animation: stagger 0.5s ease;
+}
+.summary-stat { }
+.summary-num { font-size: 1.5rem; font-weight: 700; color: var(--green); line-height: 1.2; }
+.summary-label { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+.section-title {
+  font-size: 0.6875rem; font-weight: 600; margin: 1.5rem 0 0.75rem;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
+}
+.section-title:first-child { margin-top: 0; }
+.day-card { margin-bottom: 0.875rem; animation: stagger 0.4s ease backwards; }
+.day-name { font-weight: 600; font-size: 0.9375rem; margin-bottom: 0.25rem; }
+.meal-item { color: var(--muted); font-size: 0.8125rem; padding-left: 1rem; margin-bottom: 0.5rem; line-height: 1.4; }
+.meal-name { color: var(--text); font-weight: 500; }
+
+.recipe-btn {
+  display: inline-block; font-size: 0.6875rem; color: var(--green); cursor: pointer;
+  border: 1px solid var(--green); background: none; font-family: inherit;
+  font-weight: 500; padding: 0.125rem 0.5rem; border-radius: 4px;
+  margin-left: 0.25rem; vertical-align: middle; transition: all 0.15s;
+}
+.recipe-btn:hover { background: var(--green-bg); }
+.recipe-steps {
+  max-height: 0; overflow: hidden; transition: max-height 0.35s ease;
+  margin-top: 0.375rem; padding-left: 0.25rem;
+  border-left: 2px solid var(--green-bg);
+}
+.recipe-steps.open { max-height: 800px; }
+.recipe-step {
+  font-size: 0.75rem; color: var(--text); padding: 0.25rem 0 0.25rem 0.75rem;
+  line-height: 1.45;
+}
+.recipe-step + .recipe-step { border-top: 1px solid var(--bg); }
+
+.receipt-line {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0.375rem 0; font-size: 0.8125rem;
+}
+.receipt-line .name { flex: 1; margin-right: 1rem; }
+.receipt-line .qty { color: var(--muted); margin-right: 0.5rem; white-space: nowrap; }
+.receipt-line .price { font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.receipt-divider { border-top: 1.5px solid var(--border); margin: 0.5rem 0; }
+.receipt-total .name { font-weight: 600; }
+.receipt-total .price { font-weight: 700; font-size: 0.9375rem; }
+.remaining-positive { color: var(--green); }
+.remaining-negative { color: var(--red); }
+
+.warning { background: #fff8c5; border-radius: 8px; padding: 0.75rem 1rem; margin-top: 1rem; font-size: 0.8125rem; }
+.warning-item { color: var(--muted); margin-top: 0.25rem; }
+
+/* ── Refine section ─────────── */
+.refine-section {
+  border-top: 1.5px solid var(--border); margin-top: 1.5rem; padding-top: 1.25rem;
+}
+.refine-chips { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 0.75rem; }
+.refine-chip {
+  padding: 0.3rem 0.625rem; border-radius: 99px;
+  border: 1px solid var(--border); background: var(--card);
+  cursor: pointer; font-size: 0.6875rem; font-weight: 500;
+  transition: all 0.15s; user-select: none; color: var(--muted);
+}
+.refine-chip:hover { border-color: var(--green); color: var(--green); }
+.refine-chip.active { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+.refine-input {
+  width: 100%; padding: 0.5rem 0.75rem; border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 0.8125rem; font-family: inherit;
+  background: var(--bg); color: var(--text); outline: none;
+  transition: border-color 0.15s; resize: none; min-height: 44px;
+}
+.refine-input:focus { border-color: var(--green); }
+.refine-input::placeholder { color: var(--border); }
+
+/* ── Remove buttons ─────────── */
+.remove-btn {
+  background: none; border: none; color: var(--border); cursor: pointer;
+  font-size: 0.75rem; padding: 0.125rem 0.25rem; margin-left: 0.375rem;
+  border-radius: 4px; transition: all 0.15s; line-height: 1;
+}
+.remove-btn:hover { color: var(--red); background: var(--red-bg); }
+.receipt-line.removed { opacity: 0.35; text-decoration: line-through; }
+
+/* ── Edit preferences link ──── */
+.edit-prefs {
+  display: inline-block; font-size: 0.6875rem; color: var(--muted);
+  cursor: pointer; border: none; background: none; font-family: inherit;
+  padding: 0; margin-top: 0.5rem;
+}
+.edit-prefs:hover { color: var(--text); text-decoration: underline; }
+
+/* ── Done ───────────────────── */
+.done-view { text-align: center; padding: 2rem 1rem; animation: slideUp 0.4s ease; }
+.done-view .icon { font-size: 3rem; margin-bottom: 1rem; }
+.done-view h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+.done-view p { color: var(--muted); font-size: 0.9375rem; }
+.done-view a { color: var(--green); text-decoration: none; font-weight: 600; }
+.done-view a:hover { text-decoration: underline; }
+
+/* ── Error ──────────────────── */
+.error-msg { background: var(--red-bg); color: var(--red); padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.875rem; margin-top: 1rem; }
+
+/* ── Print / PDF ────────────── */
+@media print {
+  body { background: white; padding: 0; }
+  .container { max-width: 100%; }
+  .card { box-shadow: none; border: none; padding: 1rem; }
+  header .sub, .actions, .progress-bar, .config-banner, .btn, .recipe-btn, .summary-card { display: none !important; }
+  .recipe-steps { max-height: none !important; overflow: visible !important; border-left-color: #ccc; }
+  .recipe-step { color: #333; }
+  .receipt-line, .day-card { page-break-inside: avoid; }
+  .section-title { page-break-after: avoid; }
+  .print-header { display: block !important; text-align: center; margin-bottom: 1rem; font-size: 0.75rem; color: #999; }
+  .no-print { display: none !important; }
+}
+.print-header { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Meal Planner</h1>
+    <p class="sub">nemlig.com</p>
+  </header>
+
+  <div class="card">
+    <div id="app"></div>
+  </div>
+
+  <div id="bar" class="progress-bar"></div>
+</div>
+
+<script>
+// ── Configuration ──────────────────────────────────────────
+const DEFAULT_N8N = 'http://localhost:5678';
+
+function getToken() {
+  const parts = location.pathname.split('/').filter(Boolean);
+  const idx = parts.indexOf('meal-planner');
+  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+  return new URLSearchParams(location.search).get('token') || '';
+}
+const API_TOKEN = getToken();
+
+function getN8nBase() {
+  return new URLSearchParams(location.search).get('n8n') || localStorage.getItem('n8n_url') || DEFAULT_N8N;
+}
+
+function apiHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (API_TOKEN) h['X-Api-Token'] = API_TOKEN;
+  return h;
+}
+
+// ── State ──────────────────────────────────────────────────
+const ALL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DIETS = ['Low histamine','Vegetarian','Vegan','Gluten-free','Dairy-free','Keto'];
+
+const state = {
+  step: 0,
+  phase: 'form',
+  meals: '', people: 2,
+  days: ['Monday','Tuesday','Wednesday','Thursday','Friday'],
+  diets: [], dietCustom: '', budget: 500, notes: '',
+  mealPlan: [], matched: [], notFound: [],
+  totalPrice: 0, remaining: 0,
+  addedCount: 0, failedCount: 0, errorMsg: '',
+};
+
+const STEPS = [
+  { key: 'meals',  q: 'What sounds good this week?', hint: 'Describe meals, ingredients, cuisines, or just a vibe.' },
+  { key: 'people', q: 'How many people?', hint: 'Portions scale automatically.' },
+  { key: 'days',   q: 'Which days?', hint: 'Tap the days you need meals for.' },
+  { key: 'diet',   q: 'Any dietary needs?', hint: 'Pick presets or type your own. Skip if none.' },
+  { key: 'budget', q: 'Weekly grocery budget', hint: 'In Danish kroner. We\'ll stay within this.' },
+  { key: 'notes',  q: 'Anything else?', hint: 'Cooking time, organic preference, meal prep, etc.' },
+  { key: 'review', q: 'Ready to plan?', hint: 'Here\'s what we\'ll send to the AI.' },
+];
+
+// ── Render ─────────────────────────────────────────────────
+const $app = document.getElementById('app');
+const $bar = document.getElementById('bar');
+let pipelineTimer = null;
+let pipelineStep = 0;
+
+function render() {
+  if (state.phase === 'loading') return renderLoading();
+  if (state.phase === 'results') return renderResults();
+  if (state.phase === 'adding') return renderAdding();
+  if (state.phase === 'done') return renderDone();
+  if (state.phase === 'error') return renderError();
+  renderStep();
+}
+
+function renderStep() {
+  const s = STEPS[state.step];
+  let html = `<div class="step">`;
+  html += `<div class="question">${s.q}</div>`;
+  html += `<div class="hint">${s.hint}</div>`;
+
+  switch (s.key) {
+    case 'meals':
+      html += `<textarea id="input" placeholder="e.g. pasta carbonara, chicken stir fry, hearty soups...">${esc(state.meals)}</textarea>`;
+      break;
+    case 'people':
+      html += `<div class="stepper">
+        <button onclick="adj(-1)">&#8722;</button>
+        <div class="value" id="ppl-val">${state.people}</div>
+        <button onclick="adj(+1)">&#43;</button>
+      </div>`;
+      break;
+    case 'days':
+      html += `<div class="pills">`;
+      for (const d of ALL_DAYS) {
+        html += `<div class="pill ${state.days.includes(d)?'selected':''}" onclick="toggleDay('${d}')">${d.slice(0,3)}</div>`;
+      }
+      html += `</div>`;
+      break;
+    case 'diet':
+      html += `<div class="chips">`;
+      for (const d of DIETS) {
+        html += `<div class="chip ${state.diets.includes(d)?'selected':''}" onclick="toggleDiet('${esc(d)}')">${d}</div>`;
+      }
+      html += `</div>`;
+      html += `<input type="text" id="input" placeholder="Or type your own..." value="${esc(state.dietCustom)}" oninput="state.dietCustom=this.value">`;
+      break;
+    case 'budget':
+      html += `<div class="budget-input">
+        <input type="number" id="input" value="${state.budget}" min="100" step="50" oninput="state.budget=+this.value||500">
+        <span>kr</span>
+      </div>`;
+      break;
+    case 'notes':
+      html += `<textarea id="input" placeholder="e.g. prefer organic, quick meals under 30 min, meal prep friendly...">${esc(state.notes)}</textarea>`;
+      break;
+    case 'review':
+      const diet = [...state.diets, state.dietCustom].filter(Boolean).join(', ');
+      html += `<div class="review-grid">
+        <div class="review-item"><div class="review-label">People</div><div class="review-value">${state.people}</div></div>
+        <div class="review-item"><div class="review-label">Days</div><div class="review-value">${state.days.length} days</div></div>
+        <div class="review-item"><div class="review-label">Budget</div><div class="review-value">${state.budget} kr</div></div>
+        <div class="review-item"><div class="review-label">Diet</div><div class="review-value">${diet || 'None'}</div></div>
+        <div class="review-item review-full"><div class="review-label">Meals</div><div class="review-value">${esc(state.meals)}</div></div>
+        ${state.notes ? `<div class="review-item review-full"><div class="review-label">Notes</div><div class="review-value">${esc(state.notes)}</div></div>` : ''}
+      </div>`;
+      break;
+  }
+
+  html += `<div class="actions">`;
+  if (state.step > 0) html += `<button class="btn btn-secondary" onclick="prev()">Back</button>`;
+  if (s.key === 'review') {
+    html += `<button class="btn btn-primary" onclick="submit()">Plan My Meals</button>`;
+  } else if (s.key === 'notes') {
+    html += `<button class="btn btn-primary" onclick="next()">Review</button>`;
+  } else {
+    html += `<button class="btn btn-primary" onclick="next()">Next</button>`;
+  }
+  html += `</div>`;
+  if (s.key === 'notes') html += `<div style="text-align:center;margin-top:0.5rem"><button class="btn-text" onclick="state.step++;render()">Skip</button></div>`;
+
+  html += `</div>`;
+  $app.innerHTML = html;
+  renderBar();
+  const inp = document.getElementById('input');
+  if (inp) inp.focus();
+}
+
+function renderBar() {
+  if (state.phase !== 'form') { $bar.innerHTML = ''; return; }
+  let html = '';
+  for (let i = 0; i < STEPS.length; i++) {
+    html += `<div class="prog-seg ${i < state.step ? 'done' : i === state.step ? 'active' : ''}"></div>`;
+  }
+  $bar.innerHTML = html;
+}
+
+// ── Loading ────────────────────────────────────────────────
+function getPipeline() {
+  const diet = [...state.diets, state.dietCustom].filter(Boolean).join(', ');
+  return [
+    { id: 'prompt', icon: '1', title: 'Sending your request',
+      detail: `${state.people} people \u00b7 ${state.days.length} days \u00b7 ${state.budget} kr${diet ? ' \u00b7 ' + diet : ''}` },
+    { id: 'ai', icon: '2', title: 'GPT-5.2 is designing your menu',
+      detail: `Analyzing "${state.meals.substring(0, 50)}${state.meals.length > 50 ? '\u2026' : ''}"` },
+    { id: 'login', icon: '3', title: 'Connecting to nemlig.com',
+      detail: 'Authenticating & fetching session...' },
+    { id: 'search', icon: '4', title: 'Searching for products',
+      detail: 'Looking up real products and prices...' },
+    { id: 'result', icon: '5', title: 'Finalizing shopping list',
+      detail: 'Checking stock & enforcing budget...' },
+  ];
+}
+
+function renderLoading() {
+  $bar.innerHTML = '';
+  pipelineStep = 0;
+  const P = getPipeline();
+
+  let html = '<div class="pipeline">';
+  for (let i = 0; i < P.length; i++) {
+    html += `<div class="pipe-step${i===0?' active':''}" id="pipe-${P[i].id}">
+      <div class="pipe-icon" id="pipe-icon-${P[i].id}">${P[i].icon}</div>
+      <div class="pipe-body">
+        <div class="pipe-title" id="pipe-title-${P[i].id}">${P[i].title}</div>
+        <div class="pipe-detail" id="pipe-detail-${P[i].id}">${P[i].detail}</div>
+      </div>
+      <div class="pipe-connector"></div>
+    </div>`;
+  }
+  html += '</div>';
+  $app.innerHTML = html;
+
+  const timings = [1500, 12000, 5000, 18000];
+  const searchStart = timings[0]+timings[1]+timings[2];
+  const ingredients = ['kyllingebrystfilet','basmatiris','broccoli','gulerødder','torskefilet','kartofler','olivenolie','havregryn','blåbær','squash','persille','salt','peber','smør','quinoa','æg'];
+  let elapsed = 0;
+
+  clearInterval(pipelineTimer);
+  pipelineTimer = setInterval(() => {
+    if (state.phase !== 'loading') { clearInterval(pipelineTimer); return; }
+    elapsed += 500;
+
+    if (pipelineStep === 1) {
+      const el = document.getElementById('pipe-detail-ai');
+      if (el) {
+        const t = (elapsed - timings[0]) / 1000;
+        if (t < 3) el.textContent = 'Planning meals for each day...';
+        else if (t < 6) el.textContent = 'Selecting ingredients in Danish...';
+        else if (t < 9) el.textContent = 'Writing recipes...';
+        else el.textContent = 'Calculating quantities for ' + state.people + ' people...';
+      }
+    }
+
+    if (pipelineStep === 3) {
+      const t = Math.floor((elapsed - searchStart) / 1000);
+      const idx = Math.min(t, ingredients.length - 1);
+      const el = document.getElementById('pipe-detail-search');
+      const ttl = document.getElementById('pipe-title-search');
+      if (el && idx >= 0) el.textContent = `"${ingredients[idx]}" \u2192 checking price & stock...`;
+      if (ttl) ttl.textContent = `Searching for products (${Math.min(t+1, ingredients.length)}/${ingredients.length})`;
+    }
+  }, 500);
+
+  let delay = 0;
+  for (let i = 0; i < timings.length; i++) {
+    delay += timings[i];
+    setTimeout(() => advancePipeline(i + 1), delay);
+  }
+}
+
+function advancePipeline(to) {
+  if (state.phase !== 'loading') return;
+  const P = getPipeline();
+  const doneTexts = { prompt: 'Sent', ai: 'Menu & recipes ready', login: 'Connected', search: 'Products matched', result: 'Done' };
+  for (let i = 0; i < P.length; i++) {
+    const el = document.getElementById(`pipe-${P[i].id}`);
+    if (!el) return;
+    el.classList.remove('active','done');
+    if (i < to) {
+      el.classList.add('done');
+      const icon = document.getElementById(`pipe-icon-${P[i].id}`);
+      if (icon) icon.textContent = '\u2713';
+      const det = document.getElementById(`pipe-detail-${P[i].id}`);
+      if (det) det.textContent = doneTexts[P[i].id] || '';
+    } else if (i === to) {
+      el.classList.add('active');
+    }
+  }
+  pipelineStep = to;
+}
+
+// ── Results ────────────────────────────────────────────────
+function printPDF() {
+  document.querySelectorAll('.recipe-steps').forEach(el => el.classList.add('open'));
+  window.print();
+  setTimeout(() => document.querySelectorAll('.recipe-steps').forEach(el => el.classList.remove('open')), 1000);
+}
+
+function renderResults() {
+  clearInterval(pipelineTimer);
+  $bar.innerHTML = '';
+  let html = `<div class="results">`;
+  html += `<div class="print-header">Meal Planner &mdash; nemlig.com &mdash; ${new Date().toLocaleDateString('da-DK')}</div>`;
+
+  // Summary card
+  const meals = state.mealPlan.reduce((n, d) => n + d.meals.length, 0);
+  html += `<div class="summary-card">
+    <div class="summary-stat"><div class="summary-num">${meals}</div><div class="summary-label">Meals</div></div>
+    <div class="summary-stat"><div class="summary-num">${state.matched.length}</div><div class="summary-label">Products</div></div>
+    <div class="summary-stat"><div class="summary-num">${state.totalPrice.toFixed(0)}</div><div class="summary-label">kr total</div></div>
+    <div class="summary-stat"><div class="summary-num ${state.remaining >= 0 ? 'remaining-positive' : 'remaining-negative'}">${state.remaining >= 0 ? '+' : ''}${state.remaining.toFixed(0)}</div><div class="summary-label">kr left</div></div>
+  </div>`;
+
+  // Meal plan
+  html += `<div class="section-title">Meal Plan</div>`;
+  let mealIdx = 0;
+  for (let di = 0; di < state.mealPlan.length; di++) {
+    const day = state.mealPlan[di];
+    html += `<div class="day-card" style="animation-delay:${di*0.06}s">`;
+    html += `<div class="day-name">${esc(day.day)}</div>`;
+    for (const m of day.meals) {
+      const rid = 'r' + mealIdx++;
+      html += `<div class="meal-item">`;
+      html += `<span class="meal-name">${esc(m.name)}</span>`;
+      if (m.recipe && m.recipe.length) {
+        html += ` <button class="recipe-btn" onclick="const s=document.getElementById('${rid}');s.classList.toggle('open');this.textContent=s.classList.contains('open')?'hide recipe':'show recipe'">show recipe</button>`;
+      }
+      html += `<br><span>${esc(m.description)}</span>`;
+      if (m.recipe && m.recipe.length) {
+        html += `<div class="recipe-steps" id="${rid}">`;
+        for (let si = 0; si < m.recipe.length; si++) {
+          html += `<div class="recipe-step"><strong>${si+1}.</strong> ${esc(m.recipe[si])}</div>`;
+        }
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Shopping list
+  html += `<div class="section-title">Shopping List</div>`;
+  for (let si = 0; si < state.matched.length; si++) {
+    const item = state.matched[si];
+    const removed = item._removed ? ' removed' : '';
+    html += `<div class="receipt-line${removed}" id="shop-${si}">
+      <span class="name">${esc(item.productName)}</span>
+      <span class="qty">&times;${item.wantedQty}</span>
+      <span class="price">${item._removed ? '—' : item.totalPrice.toFixed(2) + ' kr'}</span>
+      <button class="remove-btn no-print" onclick="toggleShopItem(${si})" title="${item._removed ? 'Restore' : 'Remove'}">${item._removed ? '+' : '&times;'}</button>
+    </div>`;
+  }
+  html += `<div class="receipt-divider"></div>`;
+  html += `<div class="receipt-line receipt-total"><span class="name">Total</span><span class="price">${state.totalPrice.toFixed(2)} kr</span></div>`;
+  html += `<div class="receipt-line"><span class="name">Budget</span><span class="price">${state.budget.toFixed(2)} kr</span></div>`;
+  const rc = state.remaining >= 0 ? 'remaining-positive' : 'remaining-negative';
+  html += `<div class="receipt-line"><span class="name">Remaining</span><span class="price ${rc}">${state.remaining.toFixed(2)} kr</span></div>`;
+
+  if (state.notFound.length > 0) {
+    html += `<div class="warning">Not found on nemlig.com:`;
+    for (const nf of state.notFound) html += `<div class="warning-item">${esc(nf.displayName)}</div>`;
+    html += `</div>`;
+  }
+
+  // Refine section
+  html += `<div class="refine-section no-print">`;
+  html += `<div class="section-title" style="margin-top:0">Adjust this plan</div>`;
+  html += `<div class="refine-chips" id="refine-chips">`;
+  const chips = ['Make it cheaper','More protein','Simpler recipes','Fewer ingredients','More variety','Swap expensive items'];
+  for (const c of chips) {
+    html += `<div class="refine-chip" onclick="toggleRefineChip(this,'${esc(c)}')">${c}</div>`;
+  }
+  html += `</div>`;
+  html += `<textarea class="refine-input" id="refine-input" placeholder="Or describe what to change... e.g. 'replace turkey with chicken' or 'add a vegetarian day'" rows="2"></textarea>`;
+  html += `<div class="actions" style="margin-top:0.75rem">
+    <button class="btn btn-secondary" onclick="editPrefs()" style="flex:0.6">Edit preferences</button>
+    <button class="btn btn-primary" onclick="refinePlan()">Regenerate</button>
+  </div>`;
+  html += `</div>`;
+
+  html += `<div class="actions" style="margin-top:1.25rem">
+    <button class="btn btn-secondary no-print" onclick="printPDF()" style="flex:0.5">PDF</button>
+    <button class="btn btn-primary" onclick="approve()">Add to Basket</button>
+  </div>`;
+  html += `</div>`;
+  $app.innerHTML = html;
+}
+
+function renderAdding() {
+  clearInterval(pipelineTimer); $bar.innerHTML = '';
+  $app.innerHTML = `<div class="pipeline"><div class="pipe-step active">
+    <div class="pipe-icon" style="animation:pulse-ring 1.5s ease infinite;border-color:var(--green);color:var(--green)">...</div>
+    <div class="pipe-body"><div class="pipe-title">Adding ${state.matched.length} items to your basket</div>
+    <div class="pipe-detail" style="max-height:3rem;opacity:1">This may take a moment...</div></div>
+  </div></div>`;
+}
+
+function renderDone() {
+  clearInterval(pipelineTimer); $bar.innerHTML = '';
+  let html = `<div class="done-view">`;
+  html += state.failedCount === 0
+    ? `<div class="icon">&#10003;</div><h2>${state.addedCount} items added to basket</h2>`
+    : `<div class="icon">&#9888;</div><h2>${state.addedCount} added, ${state.failedCount} failed</h2>`;
+  html += `<p>Review your basket and check out:</p>`;
+  html += `<p style="margin-top:0.75rem"><a href="https://www.nemlig.com/checkout" target="_blank">Open nemlig.com checkout &rarr;</a></p>`;
+  html += `<div class="actions" style="margin-top:2rem;justify-content:center"><button class="btn btn-secondary" onclick="reset()">Plan another week</button></div>`;
+  html += `</div>`;
+  $app.innerHTML = html;
+}
+
+function renderError() {
+  clearInterval(pipelineTimer); $bar.innerHTML = '';
+  $app.innerHTML = `<div class="done-view">
+    <div class="icon">&#10007;</div><h2>Something went wrong</h2>
+    <div class="error-msg">${esc(state.errorMsg)}</div>
+    <div class="actions" style="margin-top:1.5rem;justify-content:center"><button class="btn btn-primary" onclick="reset()">Try Again</button></div>
+  </div>`;
+}
+
+// ── Actions ────────────────────────────────────────────────
+function adj(n) {
+  state.people = Math.max(1, Math.min(12, state.people + n));
+  const el = document.getElementById('ppl-val');
+  if (el) el.textContent = state.people;
+}
+function toggleDay(d) { const i = state.days.indexOf(d); if (i>=0) state.days.splice(i,1); else state.days.push(d); render(); }
+function toggleDiet(d) { const i = state.diets.indexOf(d); if (i>=0) state.diets.splice(i,1); else state.diets.push(d); render(); }
+
+function saveStep() {
+  const inp = document.getElementById('input');
+  if (!inp) return;
+  const s = STEPS[state.step];
+  if (s.key === 'meals') state.meals = inp.value;
+  if (s.key === 'notes') state.notes = inp.value;
+  if (s.key === 'budget') state.budget = +inp.value || 500;
+  if (s.key === 'diet') state.dietCustom = inp.value;
+}
+
+function next() {
+  saveStep();
+  if (STEPS[state.step].key === 'meals' && !state.meals.trim()) return;
+  if (STEPS[state.step].key === 'days' && state.days.length === 0) return;
+  state.step = Math.min(STEPS.length - 1, state.step + 1);
+  render();
+}
+function prev() { saveStep(); state.step = Math.max(0, state.step - 1); render(); }
+
+function reset() {
+  Object.assign(state, { step:0, phase:'form', meals:'', people:2,
+    days:['Monday','Tuesday','Wednesday','Thursday','Friday'],
+    diets:[], dietCustom:'', budget:500, notes:'',
+    mealPlan:[], matched:[], notFound:[], errorMsg:'' });
+  render();
+}
+
+// ── Refine & edit ──────────────────────────────────────────
+let activeRefineChips = [];
+
+function toggleRefineChip(el, text) {
+  const idx = activeRefineChips.indexOf(text);
+  if (idx >= 0) { activeRefineChips.splice(idx, 1); el.classList.remove('active'); }
+  else { activeRefineChips.push(text); el.classList.add('active'); }
+}
+
+function toggleShopItem(idx) {
+  state.matched[idx]._removed = !state.matched[idx]._removed;
+  // Recalculate totals
+  state.totalPrice = state.matched.filter(m => !m._removed).reduce((s, m) => s + m.totalPrice, 0);
+  state.remaining = state.budget - state.totalPrice;
+  render();
+}
+
+function editPrefs() {
+  // Go back to review step with all data preserved
+  state.phase = 'form';
+  state.step = STEPS.length - 1; // review step
+  render();
+}
+
+function refinePlan() {
+  const input = document.getElementById('refine-input');
+  const feedback = input ? input.value.trim() : '';
+  const chipText = activeRefineChips.join('. ');
+  const allFeedback = [chipText, feedback].filter(Boolean).join('. ');
+
+  if (!allFeedback) return;
+
+  // Append feedback to notes and re-submit
+  const prevNotes = state.notes;
+  state.notes = [prevNotes, 'ADJUSTMENT REQUEST: ' + allFeedback].filter(Boolean).join('. ');
+  activeRefineChips = [];
+
+  // Remove items the user crossed out from the meal context
+  const removedItems = state.matched.filter(m => m._removed).map(m => m.productName);
+  if (removedItems.length) {
+    state.notes += '. User removed these items: ' + removedItems.join(', ') + ' — find alternatives or drop them.';
+  }
+
+  state.phase = 'loading';
+  render();
+  submitWithNotes(state.notes).then(() => {
+    state.notes = prevNotes; // restore original notes
+  });
+}
+
+// ── API calls ──────────────────────────────────────────────
+async function submit() {
+  saveStep();
+  if (!state.meals.trim()) { state.step = 0; render(); return; }
+  state.phase = 'loading';
+  render();
+  await submitWithNotes(state.notes);
+}
+
+async function submitWithNotes(notes) {
+  const diet = [...state.diets, state.dietCustom].filter(Boolean).join(', ');
+  try {
+    const base = getN8nBase();
+    const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
+    const resp = await fetch(`${base}/webhook/meal-plan${tp}`, {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ meals: state.meals, people: state.people, days: state.days.join(', '), diet, budget: state.budget, notes }),
+    });
+    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+    const data = await resp.json();
+    state.mealPlan = data.mealPlan || [];
+    state.matched = (data.matched || []).map(m => ({ ...m, _removed: false }));
+    state.notFound = data.notFound || [];
+    state.totalPrice = data.totalPrice || 0;
+    state.remaining = (state.budget || 500) - state.totalPrice;
+    state.phase = 'results';
+  } catch (e) {
+    state.errorMsg = e.message || 'Network error';
+    state.phase = 'error';
+  }
+  render();
+}
+
+async function approve() {
+  state.phase = 'adding'; render();
+  const items = state.matched.map(m => ({ productId: m.productId, quantity: m.wantedQty, name: m.productName }));
+  try {
+    const base = getN8nBase();
+    const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
+    const resp = await fetch(`${base}/webhook/meal-plan-approve${tp}`, {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ items }),
+    });
+    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+    const data = await resp.json();
+    state.addedCount = data.added || 0;
+    state.failedCount = data.failed || 0;
+    state.phase = 'done';
+  } catch (e) {
+    state.errorMsg = e.message || 'Failed to add items.';
+    state.phase = 'error';
+  }
+  render();
+}
+
+// ── Keyboard ───────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (state.phase !== 'form') return;
+  if (e.key === 'Enter' && !e.shiftKey) {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'TEXTAREA') return;
+    e.preventDefault();
+    if (STEPS[state.step].key === 'review') submit();
+    else next();
+  }
+});
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+render();
+</script>
+</body>
+</html>

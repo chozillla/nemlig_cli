@@ -1,0 +1,101 @@
+{
+  "name": "Meal Planner — Approve",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meal-plan-approve",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook",
+      "name": "1. Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "meal-plan-approve"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate API token\nconst expectedToken = '1562350ad8f574eccf3b8753583c6b89';\nif (expectedToken) {\n  const headers = $input.first().json.headers || {};\n  const query = $input.first().json.query || {};\n  const token = headers['x-api-token'] || headers['X-Api-Token'] || headers['X-API-TOKEN'] || Object.entries(headers).find(([k]) => k.toLowerCase() === 'x-api-token')?.[1] || query.token || '';\n  if (token !== expectedToken) throw new Error('Unauthorized');\n}\n\n// Re-authenticate to nemlig.com and add all approved items to basket.\nconst axios = require('axios');\nconst crypto = require('crypto');\n\nconst BASE_URL = 'https://www.nemlig.com';\nconst username = 'chemay.shola@gmail.com';\nconst password = '@FaggotNigger69!';\n\nconst items = $input.first().json.body.items || [];\nif (items.length === 0) {\n  throw new Error('No items to add');\n}\n\nconst commonHeaders = {\n  'Accept': 'application/json, text/plain, */*',\n  'Content-Type': 'application/json',\n  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',\n  'Device-Size': 'desktop',\n  'Platform': 'web',\n  'Version': '11.201.0',\n};\n\nlet cookies = {};\n\nfunction parseCookies(resp) {\n  const setCookies = resp.headers['set-cookie'] || [];\n  for (const c of setCookies) {\n    const parts = c.split(';')[0].split('=');\n    const name = parts[0].trim();\n    const value = parts.slice(1).join('=').trim();\n    cookies[name] = value;\n  }\n}\n\nfunction cookieHeader() {\n  return Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');\n}\n\nasync function req(method, url, data, extraHeaders) {\n  const headers = {\n    ...commonHeaders,\n    'X-Correlation-Id': crypto.randomUUID(),\n    'Cookie': cookieHeader(),\n    ...extraHeaders\n  };\n  const resp = await axios({ method, url, data, headers, validateStatus: () => true });\n  parseCookies(resp);\n  if (resp.status >= 400) {\n    throw new Error(`${method.toUpperCase()} ${url} returned ${resp.status}: ${JSON.stringify(resp.data).substring(0, 300)}`);\n  }\n  return resp;\n}\n\nconst xsrfResp = await req('get', `${BASE_URL}/webapi/AntiForgery`);\nconst xsrfToken = xsrfResp.data.Value;\n\nconst tokenResp = await req('get', `${BASE_URL}/webapi/Token`);\nconst bearerToken = tokenResp.data.access_token;\n\nconst loginResp = await req('post', `${BASE_URL}/webapi/login`, {\n  Username: username,\n  Password: password,\n  CheckForExistingProducts: true,\n  DoMerge: true,\n  AppInstalled: false,\n  SaveExistingBasket: false\n}, {\n  'X-XSRF-TOKEN': xsrfToken,\n  'Authorization': `Bearer ${bearerToken}`,\n  'Referer': `${BASE_URL}/login?returnUrl=%2F`\n});\n\nif (!loginResp.data.RedirectUrl) {\n  throw new Error('Login failed: ' + JSON.stringify(loginResp.data).substring(0, 300));\n}\n\nconst freshTokenResp = await req('get', `${BASE_URL}/webapi/Token`);\nconst freshBearer = freshTokenResp.data.access_token;\n\nconst freshXsrfResp = await req('get', `${BASE_URL}/webapi/AntiForgery`);\nconst freshXsrf = freshXsrfResp.data.Value;\n\nconst results = [];\n\nfor (const item of items) {\n  try {\n    if (results.length > 0) {\n      await new Promise(resolve => setTimeout(resolve, 1000));\n    }\n\n    await req('post', `${BASE_URL}/webapi/basket/AddToBasket`, {\n      ProductId: String(item.productId),\n      quantity: item.quantity || 1,\n      AffectPartialQuantity: false,\n      disableQuantityValidation: false\n    }, {\n      'X-XSRF-TOKEN': freshXsrf,\n      'Authorization': `Bearer ${freshBearer}`,\n      'Referer': `${BASE_URL}/`\n    });\n\n    results.push({ productId: item.productId, name: item.name, success: true });\n  } catch (e) {\n    results.push({ productId: item.productId, name: item.name, success: false, error: e.message });\n  }\n}\n\nconst added = results.filter(r => r.success).length;\nconst failed = results.filter(r => !r.success).length;\n\nreturn [{\n  json: { results, added, failed, totalItems: items.length }\n}];"
+      },
+      "id": "add-to-basket",
+      "name": "2. Auth & Add to Basket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond",
+      "name": "3. Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "1. Webhook": {
+      "main": [
+        [
+          {
+            "node": "2. Auth & Add to Basket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Auth & Add to Basket": {
+      "main": [
+        [
+          {
+            "node": "3. Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 120
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "nemlig"
+    },
+    {
+      "name": "meal-plan"
+    },
+    {
+      "name": "automation"
+    }
+  ]
+}

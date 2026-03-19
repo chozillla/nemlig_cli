@@ -1,0 +1,29 @@
+services:
+  n8n:
+    image: n8nio/n8n:1.76.1
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=Europe/Copenhagen
+      - TZ=Europe/Copenhagen
+      - N8N_SECURE_COOKIE=false
+      - NODE_FUNCTION_ALLOW_BUILTIN=crypto
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios
+      - N8N_RUNNERS_MAX_OLD_SPACE_SIZE=512
+      - N8N_RUNNERS_TASK_TIMEOUT=300
+      - N8N_RUNNERS_HEARTBEAT_INTERVAL=30
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n_meal_plan_workflow.json:/tmp/n8n_meal_plan_workflow.json:ro
+      - ./n8n_meal_plan_approve.json:/tmp/n8n_meal_plan_approve.json:ro
+      - ./n8n_weekly_grocery.json:/tmp/n8n_weekly_grocery.json:ro
+      - ./n8n_weekly_reminder.json:/tmp/n8n_weekly_reminder.json:ro
+    restart: unless-stopped
+
+volumes:
+  n8n_data:

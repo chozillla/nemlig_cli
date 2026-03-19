@@ -1,0 +1,214 @@
+{
+  "name": "Meal Planner — Plan",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meal-plan",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook",
+      "name": "1. Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "meal-plan"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate API token (case-insensitive header lookup + query param fallback)\nconst expectedToken = '1562350ad8f574eccf3b8753583c6b89';\nif (expectedToken) {\n  const headers = $input.first().json.headers || {};\n  const query = $input.first().json.query || {};\n  const token = headers['x-api-token'] || headers['X-Api-Token'] || headers['X-API-TOKEN'] || Object.entries(headers).find(([k]) => k.toLowerCase() === 'x-api-token')?.[1] || query.token || '';\n  if (token !== expectedToken) throw new Error('Unauthorized');\n}\n\nconst body = $input.first().json.body;\nconst meals = body.meals || '';\nconst people = body.people || 2;\nconst days = body.days || 'Monday, Tuesday, Wednesday, Thursday, Friday';\nconst budget = body.budget || 500;\nconst diet = body.diet || '';\nconst notes = body.notes || '';\n\nconst systemPrompt = `You are a Danish grocery meal planner for nemlig.com. You create weekly meal plans with recipes and ingredient lists.\n\nYou are an expert on dietary restrictions, food science, AND Danish grocery prices.\n\nCRITICAL BUDGET RULES:\n- The user has a STRICT budget. You MUST plan meals that fit within it.\n- Typical nemlig.com prices: chicken breast ~50kr/pack, minced meat ~35kr, eggs ~30-40kr, rice ~15-20kr, pasta ~15-25kr, vegetables ~10-25kr each, milk ~12kr, butter ~28kr\n- For a 500kr weekly budget for 2 people, plan simple meals with 8-12 total ingredients\n- For 800kr, you can have 12-18 ingredients\n- NEVER exceed the budget. If in doubt, plan fewer meals or simpler recipes.\n- When user requests organic, append \\\"øko\\\" to search terms for produce, dairy, eggs, and meat (e.g. \\\"kyllingebrystfilet øko\\\", \\\"gulerødder øko\\\", \\\"æg øko\\\")\\n- Even with organic, stay within budget — organic staples are usually only 10-30% more expensive\n\nSEARCH TERM RULES:\n- All search terms MUST be specific Danish product names as you'd type in a grocery search\n- GOOD: \"kyllingebrystfilet\", \"hakket kalkun\", \"hakket oksekød\", \"basmatiris\", \"torskefilet\", \"æg\", \"spaghetti\"\n- BAD: \"kalkun\" (returns whole turkey!), \"kød\" (too vague), \"fisk\" (too vague), \"ris\" (too generic)\n- Always use the specific cut/type: \"hakket\" (minced), \"filet\", \"bryst\" (breast), \"strimler\" (strips)\n\nQUANTITY RULES:\n- Quantity = number of PACKAGES to buy from the store (1-3 max per ingredient)\n- Most items need quantity 1. Only staples like rice/pasta might need 2.\n- Consolidate: if multiple meals use chicken, list it ONCE with combined quantity\n\nOTHER RULES:\n- Scale for the number of people\n- Respect ALL dietary restrictions strictly\n- Be practical: use common Danish supermarket ingredients\n- Include a recipe for each meal. Use as many or few steps as the dish actually needs — a simple salad might be 2 steps, a stew might be 8. Do NOT pad or compress to hit a fixed number.\\n- Write each step as a clear instruction a home cook can follow, with temps, times, and quantities where relevant.\n\nRespond with valid JSON only. No markdown, no explanation.`;\n\nlet userMessage = 'Plan meals for ' + people + ' people.\\nDays: ' + days + '\\nMeal ideas: ' + meals + '\\nBudget: ' + budget + ' kr (STRICT - do not exceed!)';\n\nif (diet) userMessage += '\\nDiet / restrictions: ' + diet;\nif (notes) userMessage += '\\nExtra notes: ' + notes;\n\nuserMessage += '\\n\\nReturn a JSON object with this exact structure:\\n{\\n  \"mealPlan\": [\\n    {\\n      \"day\": \"Monday\",\\n      \"meals\": [\\n        {\\n          \"type\": \"dinner\",\\n          \"name\": \"Meal name\",\\n          \"description\": \"Brief description\",\\n          \"recipe\": [\"Step 1: ...\", \"Step 2: ...\", \"Step 3: ...\"]\\n        }\\n      ]\\n    }\\n  ],\\n  \"ingredients\": [\\n    { \"searchTerm\": \"specific Danish search term\", \"quantity\": 1, \"category\": \"protein/dairy/vegetable/grain/other\", \"displayName\": \"Name with weight\", \"estimatedPrice\": 30 }\\n  ],\\n  \"estimatedTotal\": 350,\\n  \"budgetNotes\": \"Brief note on how budget was managed\"\\n}';\n\nreturn [{\n  json: {\n    systemPrompt,\n    userMessage,\n    formData: { meals, people, days, budget, diet, notes }\n  }\n}];"
+      },
+      "id": "build-prompt",
+      "name": "2. Build AI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://cehs-mk59u7e0-eastus2.cognitiveservices.azure.com/openai/deployments/gpt-5.2/chat/completions?api-version=2025-04-01-preview",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    { \"role\": \"system\", \"content\": {{ JSON.stringify($json.systemPrompt) }} },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify($json.userMessage) }} }\n  ],\n  \"temperature\": 0.7,\n  \"max_completion_tokens\": 4000,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "azure-openai",
+      "name": "3. Azure OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Azure OpenAI API Key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Configure credential: Header Name = 'api-key', Header Value = your Azure OpenAI key. Set env vars AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response and validate\nconst aiResponse = $input.first().json;\nconst formData = $('2. Build AI Prompt').first().json.formData;\n\nlet content;\ntry {\n  content = aiResponse.choices[0].message.content;\n} catch (e) {\n  throw new Error('Failed to extract AI response: ' + JSON.stringify(aiResponse).substring(0, 500));\n}\n\nlet plan;\ntry {\n  plan = JSON.parse(content);\n} catch (e) {\n  throw new Error('AI returned invalid JSON: ' + content.substring(0, 500));\n}\n\nif (!plan.mealPlan || !plan.ingredients) {\n  throw new Error('AI response missing mealPlan or ingredients');\n}\n\nconst ingredients = plan.ingredients.filter(i => i.searchTerm && i.searchTerm.trim());\nif (ingredients.length === 0) {\n  throw new Error('No valid ingredients');\n}\n\n// Cap quantities at 3 max\nfor (const ing of ingredients) {\n  if (ing.quantity > 3) ing.quantity = 3;\n}\n\nreturn [{\n  json: {\n    mealPlan: plan.mealPlan,\n    ingredients,\n    formData,\n    totalIngredients: ingredients.length,\n    estimatedTotal: plan.estimatedTotal || 0,\n    budgetNotes: plan.budgetNotes || '',\n  }\n}];"
+      },
+      "id": "parse-ai",
+      "name": "4. Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Full Nemlig auth using axios with cookie management.\nconst axios = require('axios');\nconst crypto = require('crypto');\n\nconst BASE_URL = 'https://www.nemlig.com';\nconst username = 'chemay.shola@gmail.com';\nconst password = '@FaggotNigger69!';\n\nconst commonHeaders = {\n  'Accept': 'application/json, text/plain, */*',\n  'Content-Type': 'application/json',\n  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',\n  'Device-Size': 'desktop',\n  'Platform': 'web',\n  'Version': '11.201.0',\n};\n\nlet cookies = {};\n\nfunction parseCookies(resp) {\n  const raw = resp.headers['set-cookie'];\n  if (!raw) return;\n  const lines = Array.isArray(raw) ? raw : [raw];\n  for (const line of lines) {\n    const kv = line.split(';')[0].split('=');\n    const name = kv[0].trim();\n    const value = kv.slice(1).join('=').trim();\n    if (name) cookies[name] = value;\n  }\n}\n\nfunction cookieHeader() {\n  return Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');\n}\n\nasync function req(method, url, data, extraHeaders) {\n  const headers = {\n    ...commonHeaders,\n    'X-Correlation-Id': crypto.randomUUID(),\n    'Cookie': cookieHeader(),\n    ...extraHeaders\n  };\n  const resp = await axios({ method, url, data, headers, validateStatus: () => true, maxRedirects: 0 });\n  parseCookies(resp);\n  if (resp.status >= 400 && resp.status !== 302 && resp.status !== 301) {\n    throw new Error(`${method.toUpperCase()} ${url} returned ${resp.status}: ${JSON.stringify(resp.data).substring(0, 300)}`);\n  }\n  return resp;\n}\n\n// Step 1: XSRF token\nconst xsrfResp = await req('get', `${BASE_URL}/webapi/AntiForgery`);\nconst xsrfToken = xsrfResp.data.Value;\n\n// Step 2: Bearer token\nconst tokenResp = await req('get', `${BASE_URL}/webapi/Token`);\nconst bearerToken = tokenResp.data.access_token;\n\n// Step 3: Login\nconst loginResp = await req('post', `${BASE_URL}/webapi/login`, {\n  Username: username,\n  Password: password,\n  CheckForExistingProducts: true,\n  DoMerge: true,\n  AppInstalled: false,\n  SaveExistingBasket: false\n}, {\n  'X-XSRF-TOKEN': xsrfToken,\n  'Authorization': `Bearer ${bearerToken}`,\n  'Referer': `${BASE_URL}/login?returnUrl=%2F`\n});\n\nif (!loginResp.data.RedirectUrl) {\n  throw new Error('Login failed: ' + JSON.stringify(loginResp.data).substring(0, 300));\n}\n\n// Step 4: Fresh tokens\nconst freshTokenResp = await req('get', `${BASE_URL}/webapi/Token`);\nconst freshBearer = freshTokenResp.data.access_token;\n\nconst freshXsrfResp = await req('get', `${BASE_URL}/webapi/AntiForgery`);\nconst freshXsrf = freshXsrfResp.data.Value;\n\n// App settings - get timestamp for search\nlet timestamp = '';\ntry {\n  const appResp = await req('get', `${BASE_URL}/webapi/v2/AppSettings/Website`, null, {\n    'Authorization': `Bearer ${freshBearer}`,\n    'X-XSRF-TOKEN': freshXsrf\n  });\n  timestamp = appResp.data.CombinedProductsAndSitecoreTimestamp || '';\n} catch(e) {\n  // Non-critical, search works without it\n}\n\n// Generate timeslotUtc dynamically (format: YYYYMMDDHH-offset-window)\n// The format is the next delivery date at 16:00 with 60min offset and 180min window\nconst now = new Date();\nnow.setDate(now.getDate() + 1); // next day\nconst y = now.getFullYear();\nconst m = String(now.getMonth() + 1).padStart(2, '0');\nconst d = String(now.getDate()).padStart(2, '0');\nconst timeslotUtc = `${y}${m}${d}16-60-180`;\nconst deliveryZoneId = 1;\nconst userId = '';\n\nconst upstream = $input.first().json;\n\nreturn [{\n  json: {\n    bearer: freshBearer,\n    xsrf: freshXsrf,\n    cookies: JSON.stringify(cookies),\n    searchParams: { timestamp, timeslotUtc, deliveryZoneId, userId },\n    mealPlan: upstream.mealPlan,\n    ingredients: upstream.ingredients,\n    formData: upstream.formData,\n    totalIngredients: upstream.totalIngredients\n  }\n}];"
+      },
+      "id": "nemlig-auth",
+      "name": "5. Nemlig Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond",
+      "name": "10. Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Search all ingredients and enforce budget\nconst axios = require('axios');\nconst auth = $input.first().json;\nconst ingredients = auth.ingredients;\nconst mealPlan = auth.mealPlan;\nconst budget = auth.formData.budget || 500;\n\nconst searchUrl = 'https://webapi.prod.knl.nemlig.it/searchgateway/api/search';\nconst matched = [];\nconst notFound = [];\n\nfor (const ing of ingredients) {\n  try {\n    if (matched.length + notFound.length > 0) {\n      await new Promise(r => setTimeout(r, 500));\n    }\n    \n    const resp = await axios.get(searchUrl, {\n      params: {\n        query: ing.searchTerm,\n        take: 10, skip: 0, recipeCount: 0,\n        timestamp: auth.searchParams.timestamp || '',\n        timeslotUtc: auth.searchParams.timeslotUtc || '',\n        deliveryZoneId: auth.searchParams.deliveryZoneId || 1,\n      },\n      headers: {\n        'Accept': 'application/json, text/plain, */*',\n        'Authorization': `Bearer ${auth.bearer}`,\n        'Referer': 'https://www.nemlig.com/',\n        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',\n      },\n      validateStatus: () => true,\n    });\n\n    if (resp.status !== 200) {\n      notFound.push({ searchTerm: ing.searchTerm, displayName: ing.displayName || ing.searchTerm, wantedQty: ing.quantity || 1 });\n      continue;\n    }\n\n    const products = (resp.data?.Products?.Products) || [];\n    const available = products.filter(p =>\n      p.Availability?.IsAvailableInStock !== false &&\n      p.Availability?.IsDeliveryAvailable !== false\n    );\n\n    if (available.length === 0) {\n      notFound.push({ searchTerm: ing.searchTerm, displayName: ing.displayName || ing.searchTerm, wantedQty: ing.quantity || 1 });\n      continue;\n    }\n\n    // Pick the cheapest available option\n    const sorted = available.sort((a, b) => (a.Price || 999) - (b.Price || 999));\n    const best = sorted[0];\n    const qty = Math.min(ing.quantity || 1, 3);\n    matched.push({\n      searchTerm: ing.searchTerm,\n      displayName: ing.displayName || ing.searchTerm,\n      wantedQty: qty,\n      productId: best.Id,\n      productName: best.Name,\n      brand: best.Brand || '',\n      price: best.Price || 0,\n      totalPrice: (best.Price || 0) * qty,\n    });\n  } catch (e) {\n    notFound.push({ searchTerm: ing.searchTerm, displayName: ing.displayName || ing.searchTerm, wantedQty: ing.quantity || 1 });\n  }\n}\n\n// Deduplicate: merge items with same productId\nconst seen = new Map();\nfor (let i = matched.length - 1; i >= 0; i--) {\n  const item = matched[i];\n  if (seen.has(item.productId)) {\n    const existing = seen.get(item.productId);\n    existing.wantedQty = Math.min(existing.wantedQty + item.wantedQty, 5);\n    existing.totalPrice = existing.price * existing.wantedQty;\n    matched.splice(i, 1);\n  } else {\n    seen.set(item.productId, item);\n  }\n}\n\n// Budget enforcement: if over budget, reduce quantities starting with most expensive\nlet totalPrice = matched.reduce((sum, m) => sum + m.totalPrice, 0);\n\nif (totalPrice > budget) {\n  // Sort by unit price descending\n  const byPrice = [...matched].sort((a, b) => b.price - a.price);\n  \n  for (const item of byPrice) {\n    if (totalPrice <= budget) break;\n    // Reduce quantity if > 1\n    while (item.wantedQty > 1 && totalPrice > budget) {\n      item.wantedQty--;\n      item.totalPrice = item.price * item.wantedQty;\n      totalPrice = matched.reduce((sum, m) => sum + m.totalPrice, 0);\n    }\n  }\n  \n  // If still over, remove most expensive items\n  if (totalPrice > budget) {\n    matched.sort((a, b) => b.price - a.price);\n    while (matched.length > 3 && totalPrice > budget) {\n      const removed = matched.shift();\n      notFound.push({ searchTerm: removed.searchTerm, displayName: removed.displayName + ' (over budget)', wantedQty: removed.wantedQty });\n      totalPrice = matched.reduce((sum, m) => sum + m.totalPrice, 0);\n    }\n  }\n}\n\nconst remaining = budget - totalPrice;\n\nreturn [{\n  json: {\n    mealPlan,\n    matched,\n    notFound,\n    totalPrice,\n    budget,\n    remaining,\n  }\n}];"
+      },
+      "id": "search-aggregate",
+      "name": "6. Search & Aggregate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "1. Webhook": {
+      "main": [
+        [
+          {
+            "node": "2. Build AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Build AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "3. Azure OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Azure OpenAI": {
+      "main": [
+        [
+          {
+            "node": "4. Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "5. Nemlig Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Nemlig Auth": {
+      "main": [
+        [
+          {
+            "node": "6. Search & Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Search & Aggregate": {
+      "main": [
+        [
+          {
+            "node": "10. Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 300
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "nemlig"
+    },
+    {
+      "name": "meal-plan"
+    },
+    {
+      "name": "automation"
+    }
+  ]
+}
