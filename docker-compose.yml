@@ -12,6 +12,7 @@ services:
       - GENERIC_TIMEZONE=Europe/Copenhagen
       - TZ=Europe/Copenhagen
       - N8N_SECURE_COOKIE=false
+      - N8N_TRUST_PROXY=true
       - NEMLIG_USER=${NEMLIG_USER}
       - NEMLIG_PASS=${NEMLIG_PASS}
       - API_TOKEN=${API_TOKEN}

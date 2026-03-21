@@ -5,12 +5,14 @@
 # Prerequisites:
 #   - Azure CLI installed (brew install azure-cli)
 #   - Logged in (az login)
+#   - Custom domain purchased from a registrar (e.g. simply.com for .dk)
 #
 # Architecture:
 #   Internet → :443 (Caddy + auto TLS) → localhost:5678 (n8n)
 #   Both containers share a network namespace in ACI (like a k8s pod).
+#   Custom domain DNS managed via Azure DNS zone.
 #
-# Cost: ~$15-30/month (1 vCPU, 1.5GB RAM + storage)
+# Cost: ~$15-30/month (1 vCPU, 1.5GB RAM + storage) + ~$0.50/month for DNS zone
 
 set -euo pipefail
 
@@ -23,11 +25,18 @@ N8N_SHARE="n8ndata"
 CADDY_SHARE="caddydata"
 CONTAINER_GROUP="n8n"
 DNS_LABEL="nemlig-n8n"            # Your instance will be at: nemlig-n8n.northeurope.azurecontainer.io
+CUSTOM_DOMAIN="${CUSTOM_DOMAIN:-ugemad.dk}"  # Custom domain — set to "" to use Azure FQDN only
 N8N_ENCRYPTION_KEY=""             # Set this! Used to encrypt credentials in n8n
 MEAL_PLANNER_TOKEN="${MEAL_PLANNER_TOKEN:-$(openssl rand -hex 16)}"  # Set via env or auto-generate
 
 # ---- Derived ----
-FQDN="$DNS_LABEL.$LOCATION.azurecontainer.io"
+ACI_FQDN="$DNS_LABEL.$LOCATION.azurecontainer.io"
+# Use custom domain for Caddy if set, otherwise fall back to Azure FQDN
+if [ -n "$CUSTOM_DOMAIN" ]; then
+    FQDN="$CUSTOM_DOMAIN"
+else
+    FQDN="$ACI_FQDN"
+fi
 
 # Generate encryption key if not set
 if [ -z "$N8N_ENCRYPTION_KEY" ]; then
@@ -45,18 +54,25 @@ fi
 echo "=== Deploying n8n + Caddy (HTTPS) to Azure Container Instances ==="
 echo "Resource Group: $RESOURCE_GROUP"
 echo "Location:       $LOCATION"
-echo "URL:            https://$FQDN"
+if [ -n "$CUSTOM_DOMAIN" ]; then
+    echo "Custom Domain:  https://$CUSTOM_DOMAIN"
+    echo "Azure FQDN:     https://$ACI_FQDN (redirects to custom domain)"
+    TOTAL_STEPS=10
+else
+    echo "URL:            https://$ACI_FQDN"
+    TOTAL_STEPS=8
+fi
 echo ""
 
 # 1. Create resource group
-echo "[1/8] Creating resource group..."
+echo "[1/$TOTAL_STEPS] Creating resource group..."
 az group create \
     --name "$RESOURCE_GROUP" \
     --location "$LOCATION" \
     --output none
 
 # 2. Create Azure Container Registry
-echo "[2/8] Creating container registry..."
+echo "[2/$TOTAL_STEPS] Creating container registry..."
 ACR_NAME=$(echo "${ACR_NAME}" | tr -d '-' | head -c 24)
 az acr create \
     --resource-group "$RESOURCE_GROUP" \
@@ -66,7 +82,7 @@ az acr create \
     --output none
 
 # 3. Build n8n image in ACR
-echo "[3/8] Building n8n amd64 image in ACR..."
+echo "[3/$TOTAL_STEPS] Building n8n amd64 image in ACR..."
 TMPDIR_BUILD=$(mktemp -d)
 echo 'FROM n8nio/n8n:latest' > "$TMPDIR_BUILD/Dockerfile"
 az acr build \
@@ -79,11 +95,33 @@ az acr build \
 rm -rf "$TMPDIR_BUILD"
 
 # 4. Build Caddy image with embedded Caddyfile + meal planner HTML
-echo "[4/8] Building Caddy reverse-proxy image in ACR..."
+echo "[4/$TOTAL_STEPS] Building Caddy reverse-proxy image in ACR..."
 TMPDIR_CADDY=$(mktemp -d)
-cat > "$TMPDIR_CADDY/Caddyfile" <<EOF
-$FQDN {
-    handle /meal-planner/$MEAL_PLANNER_TOKEN {
+if [ -n "$CUSTOM_DOMAIN" ]; then
+    # Custom domain config: serve on custom domain, redirect Azure FQDN → custom domain
+    cat > "$TMPDIR_CADDY/Caddyfile" <<EOF
+$CUSTOM_DOMAIN {
+    handle /meal-planner/$MEAL_PLANNER_TOKEN* {
+        root * /srv
+        rewrite * /meal-planner.html
+        file_server
+    }
+    handle /meal-planner* {
+        respond "Not found" 404
+    }
+    handle {
+        reverse_proxy localhost:5678
+    }
+}
+
+$ACI_FQDN {
+    redir https://$CUSTOM_DOMAIN{uri} permanent
+}
+EOF
+else
+    cat > "$TMPDIR_CADDY/Caddyfile" <<EOF
+$ACI_FQDN {
+    handle /meal-planner/$MEAL_PLANNER_TOKEN* {
         root * /srv
         rewrite * /meal-planner.html
         file_server
@@ -96,6 +134,7 @@ $FQDN {
     }
 }
 EOF
+fi
 cp meal-planner.html "$TMPDIR_CADDY/meal-planner.html"
 cat > "$TMPDIR_CADDY/Dockerfile" <<'EOF'
 FROM caddy:2-alpine
@@ -117,7 +156,7 @@ ACR_USER=$(az acr credential show --name "$ACR_NAME" --query "username" -o tsv)
 ACR_PASS=$(az acr credential show --name "$ACR_NAME" --query "passwords[0].value" -o tsv)
 
 # 5. Create storage account + file shares
-echo "[5/8] Creating storage..."
+echo "[5/$TOTAL_STEPS] Creating storage..."
 STORAGE_ACCOUNT=$(echo "${STORAGE_ACCOUNT}" | tr -d '-' | head -c 24)
 az storage account create \
     --name "$STORAGE_ACCOUNT" \
@@ -131,12 +170,12 @@ STORAGE_KEY=$(az storage account keys list \
     --account-name "$STORAGE_ACCOUNT" \
     --query "[0].value" -o tsv)
 
-echo "[6/8] Creating file shares..."
+echo "[6/$TOTAL_STEPS] Creating file shares..."
 az storage share create --name "$N8N_SHARE" --account-name "$STORAGE_ACCOUNT" --account-key "$STORAGE_KEY" --quota 1 --output none
 az storage share create --name "$CADDY_SHARE" --account-name "$STORAGE_ACCOUNT" --account-key "$STORAGE_KEY" --quota 1 --output none
 
 # 7. Generate YAML deployment (multi-container group: n8n + caddy)
-echo "[7/8] Deploying container group (n8n + Caddy)..."
+echo "[7/$TOTAL_STEPS] Deploying container group (n8n + Caddy)..."
 DEPLOY_YAML=$(mktemp /tmp/n8n-deploy-XXXX.yaml)
 cat > "$DEPLOY_YAML" <<YAML
 apiVersion: 2021-09-01
@@ -161,7 +200,7 @@ properties:
             protocol: TCP
         environmentVariables:
           - name: N8N_HOST
-            value: "$FQDN"
+            value: "$ACI_FQDN"
           - name: N8N_PORT
             value: "5678"
           - name: N8N_PROTOCOL
@@ -169,6 +208,8 @@ properties:
           - name: N8N_SECURE_COOKIE
             value: "true"
           - name: WEBHOOK_URL
+            value: "https://$FQDN/"
+          - name: N8N_EDITOR_BASE_URL
             value: "https://$FQDN/"
           - name: GENERIC_TIMEZONE
             value: "Europe/Copenhagen"
@@ -222,8 +263,8 @@ az container create \
     --output none
 rm -f "$DEPLOY_YAML"
 
-# 8. Verify
-echo "[8/8] Verifying deployment..."
+# 8. Verify container deployment
+echo "[8/$TOTAL_STEPS] Verifying deployment..."
 STATE=$(az container show \
     --resource-group "$RESOURCE_GROUP" \
     --name "$CONTAINER_GROUP" \
@@ -234,16 +275,76 @@ IP=$(az container show \
     --name "$CONTAINER_GROUP" \
     --query "ipAddress.ip" -o tsv)
 
+echo "Container status: $STATE (IP: $IP)"
+
+# 9-10. Set up Azure DNS zone for custom domain
+if [ -n "$CUSTOM_DOMAIN" ]; then
+    echo "[9/$TOTAL_STEPS] Creating Azure DNS zone for $CUSTOM_DOMAIN..."
+    az network dns zone create \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$CUSTOM_DOMAIN" \
+        --output none 2>/dev/null || echo "  DNS zone already exists, skipping..."
+
+    echo "[10/$TOTAL_STEPS] Creating DNS records..."
+    # A record: root domain → container IP
+    az network dns record-set a add-record \
+        --resource-group "$RESOURCE_GROUP" \
+        --zone-name "$CUSTOM_DOMAIN" \
+        --record-set-name "@" \
+        --ipv4-address "$IP" \
+        --output none 2>/dev/null || \
+    az network dns record-set a update \
+        --resource-group "$RESOURCE_GROUP" \
+        --zone-name "$CUSTOM_DOMAIN" \
+        --name "@" \
+        --output none 2>/dev/null || true
+
+    # www CNAME → root domain
+    az network dns record-set cname set-record \
+        --resource-group "$RESOURCE_GROUP" \
+        --zone-name "$CUSTOM_DOMAIN" \
+        --record-set-name "www" \
+        --cname "$CUSTOM_DOMAIN" \
+        --output none 2>/dev/null || true
+
+    # Get the nameservers to configure at registrar
+    NAMESERVERS=$(az network dns zone show \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$CUSTOM_DOMAIN" \
+        --query "nameServers" -o tsv)
+fi
+
 echo ""
 echo "=== n8n Deployed with HTTPS! ==="
 echo "Status: $STATE"
-echo "URL:    https://$FQDN"
 echo "IP:     $IP"
+echo ""
+if [ -n "$CUSTOM_DOMAIN" ]; then
+    echo "Custom Domain:  https://$CUSTOM_DOMAIN"
+    echo "Azure FQDN:     https://$ACI_FQDN (redirects to custom domain)"
+    echo ""
+    echo "Meal Planner:   https://$CUSTOM_DOMAIN/meal-planner/$MEAL_PLANNER_TOKEN"
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║  IMPORTANT: Update your domain's nameservers!              ║"
+    echo "║                                                            ║"
+    echo "║  Go to your domain registrar and set these nameservers:    ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "$NAMESERVERS" | while read -r ns; do
+        echo "    $ns"
+    done
+    echo ""
+    echo "  DNS propagation can take up to 48 hours (usually 1-2 hours)."
+    echo "  Until then, use: https://$ACI_FQDN"
+else
+    echo "URL:    https://$ACI_FQDN"
+    echo ""
+    echo "Meal Planner: https://$ACI_FQDN/meal-planner/$MEAL_PLANNER_TOKEN"
+fi
 echo ""
 echo "Caddy will auto-provision a Let's Encrypt TLS certificate on first request."
 echo "This may take 30-60 seconds on the very first visit."
-echo ""
-echo "Meal Planner: https://$FQDN/meal-planner/$MEAL_PLANNER_TOKEN"
 echo ""
 echo "Next steps:"
 echo "  1. Open https://$FQDN and create your admin account"

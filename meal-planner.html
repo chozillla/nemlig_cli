@@ -364,14 +364,92 @@ textarea { resize: vertical; min-height: 100px; }
   .no-print { display: none !important; }
 }
 .print-header { display: none; }
+
+/* ── Auth Screen ───────────── */
+.auth-view { animation: slideUp 0.3s ease; }
+.auth-title { font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: 0.25rem; }
+.auth-subtitle { color: var(--muted); font-size: 0.875rem; text-align: center; margin-bottom: 1.5rem; }
+.auth-input { margin-bottom: 0.75rem; }
+.auth-input label { display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.25rem; }
+.auth-input input {
+  width: 100%; padding: 0.75rem 1rem;
+  border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 1rem; font-family: inherit;
+  background: var(--bg); color: var(--text);
+  transition: border-color 0.15s; outline: none;
+}
+.auth-input input:focus { border-color: var(--green); }
+.auth-error { color: var(--red); font-size: 0.8125rem; margin-bottom: 0.75rem; display: none; }
+.auth-error.show { display: block; }
+.auth-divider {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin: 1.25rem 0; color: var(--muted); font-size: 0.8125rem;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.auth-social { display: flex; flex-direction: column; gap: 0.5rem; }
+.auth-social-btn {
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.625rem 1rem; border-radius: 10px;
+  border: 1.5px solid var(--border); background: var(--card);
+  font-size: 0.9375rem; font-weight: 500; cursor: pointer;
+  transition: all 0.15s; font-family: inherit; color: var(--text);
+}
+.auth-social-btn:hover { border-color: var(--green); background: var(--bg); }
+.auth-social-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+.auth-link {
+  text-align: center; margin-top: 1rem;
+  font-size: 0.8125rem; color: var(--muted);
+}
+.auth-link a {
+  color: var(--green); text-decoration: none; font-weight: 600; cursor: pointer;
+}
+.auth-link a:hover { text-decoration: underline; }
+
+/* ── User Bar ──────────────── */
+.user-bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0; margin-bottom: 0.5rem;
+}
+.user-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--green); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+}
+.user-name { flex: 1; font-size: 0.875rem; font-weight: 500; }
+.user-bar .btn-text { font-size: 0.75rem; color: var(--muted); }
+
+/* ── Nav Tabs ──────────────── */
+.nav-tabs {
+  display: none; gap: 0; margin-bottom: 1rem;
+  border-bottom: 1.5px solid var(--border);
+}
+.nav-tab {
+  padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500;
+  color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all 0.15s; margin-bottom: -1.5px;
+}
+.nav-tab:hover { color: var(--text); }
+.nav-tab.active { color: var(--green); border-bottom-color: var(--green); }
+
+/* ── Profile View ──────────── */
+.profile-view { animation: slideUp 0.3s ease; }
+.profile-field { margin-bottom: 1.25rem; }
+.profile-field label { display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.375rem; }
+.profile-field .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div class="container">
   <header>
     <h1>Meal Planner</h1>
-    <p class="sub">nemlig.com &middot; <span id="provider-display" style="cursor:pointer" onclick="toggleLLMPanel()">Azure OpenAI</span> &middot; <label style="cursor:pointer;user-select:none"><input type="checkbox" id="dev-mode" onchange="toggleDevMode()" style="vertical-align:middle"> Dev</label></p>
+    <p class="sub" id="header-sub">nemlig.com &middot; <span id="provider-display" style="cursor:pointer" onclick="toggleLLMPanel()">Azure OpenAI</span> &middot; <label style="cursor:pointer;user-select:none"><input type="checkbox" id="dev-mode" onchange="toggleDevMode()" style="vertical-align:middle"> Dev</label></p>
+    <div id="user-bar"></div>
   </header>
+  <nav class="nav-tabs" id="nav-tabs"></nav>
 
   <div id="settings" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;margin-bottom:0.75rem">
     <div class="card" style="padding:1.25rem">
@@ -405,7 +483,7 @@ textarea { resize: vertical; min-height: 100px; }
     </div>
   </div>
 
-  <div class="basket-bar no-print" onclick="toggleBasket()">
+  <div class="basket-bar no-print" id="basket-bar" onclick="toggleBasket()" style="display:none">
     <div>Basket <span class="basket-count empty" id="basket-count">0</span></div>
     <div style="text-align:right">
       <div class="basket-total" id="basket-total">0.00 kr</div>
@@ -425,18 +503,300 @@ textarea { resize: vertical; min-height: 100px; }
 
 <script>
 // ── Configuration ──────────────────────────────────────────
-const DEFAULT_N8N = 'http://localhost:5678';
+const DEFAULT_N8N = location.origin;
 
 function getToken() {
   const parts = location.pathname.split('/').filter(Boolean);
   const idx = parts.indexOf('meal-planner');
   if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
-  return new URLSearchParams(location.search).get('token') || '';
+  const urlToken = new URLSearchParams(location.search).get('token');
+  if (urlToken) localStorage.setItem('api_token', urlToken);
+  return urlToken || localStorage.getItem('api_token') || '';
 }
 const API_TOKEN = getToken();
 
 function getN8nBase() {
   return new URLSearchParams(location.search).get('n8n') || localStorage.getItem('n8n_url') || DEFAULT_N8N;
+}
+
+// ── Supabase Auth ─────────────────────────────────────────
+// TODO: Replace these with your Supabase project values
+const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+let sb = null;
+let currentUser = null;
+let userProfile = null;
+
+try {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (e) {
+  console.warn('Supabase init failed:', e.message);
+}
+
+async function loadProfile(userId) {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+    if (error && error.code !== 'PGRST116') console.warn('Profile load error:', error);
+    if (data) {
+      userProfile = data;
+      state.people = data.household_size || 2;
+      state.diets = data.dietary_preferences || [];
+      state.budget = data.weekly_budget || 500;
+      state.meals = data.favorite_meals || '';
+      state.days = (data.default_days && data.default_days.length > 0) ? data.default_days : [...ALL_DAYS];
+      state.notes = data.default_notes || '';
+    }
+  } catch (e) { console.warn('Failed to load profile:', e); }
+}
+
+async function saveProfileData(data) {
+  if (!sb || !currentUser) return null;
+  try {
+    const { error } = await sb.from('profiles').upsert({
+      id: currentUser.id,
+      display_name: data.displayName || '',
+      household_size: data.householdSize || 2,
+      dietary_preferences: data.dietaryPreferences || [],
+      weekly_budget: data.weeklyBudget || 500,
+      favorite_meals: data.favoriteMeals || '',
+      default_days: data.defaultDays || [...ALL_DAYS],
+      default_notes: data.defaultNotes || '',
+      updated_at: new Date().toISOString(),
+    });
+    if (error) console.warn('Profile save error:', error);
+    return !error;
+  } catch (e) { console.warn('Failed to save profile:', e); return null; }
+}
+
+async function doSignInWithProvider(provider) {
+  if (!sb) return alert('Supabase not configured yet. Set SUPABASE_URL and SUPABASE_ANON_KEY.');
+  const { error } = await sb.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: window.location.href.split('#')[0] }
+  });
+  if (error) console.error('OAuth error:', error);
+}
+
+async function doSignInWithEmail() {
+  if (!sb) return;
+  const email = document.getElementById('auth-email')?.value?.trim();
+  const password = document.getElementById('auth-password')?.value;
+  const errEl = document.getElementById('auth-error');
+  if (!email || !password) { errEl.textContent = 'Enter email and password.'; errEl.classList.add('show'); return; }
+
+  // Try sign in first, then sign up if account doesn't exist
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    if (error.message.includes('Invalid login')) {
+      errEl.textContent = 'Invalid email or password. Use "Create account" to sign up.';
+    } else {
+      errEl.textContent = error.message;
+    }
+    errEl.classList.add('show');
+    return;
+  }
+  // Success — onAuthStateChange handles the rest
+}
+
+async function doSignUp() {
+  if (!sb) return;
+  const email = document.getElementById('auth-email')?.value?.trim();
+  const password = document.getElementById('auth-password')?.value;
+  const errEl = document.getElementById('auth-error');
+  if (!email || !password) { errEl.textContent = 'Enter email and password.'; errEl.classList.add('show'); return; }
+  if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.add('show'); return; }
+
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if (error) { errEl.textContent = error.message; errEl.classList.add('show'); return; }
+  if (data.user && !data.session) {
+    errEl.textContent = 'Check your email to confirm your account.';
+    errEl.classList.add('show');
+    errEl.style.color = 'var(--green)';
+  }
+}
+
+async function doSignOut() {
+  if (!sb) return;
+  await sb.auth.signOut();
+  currentUser = null;
+  userProfile = null;
+  state.phase = 'auth';
+  state.authView = 'login';
+  renderUserBar();
+  render();
+}
+
+function renderUserBar() {
+  const bar = document.getElementById('user-bar');
+  const sub = document.getElementById('header-sub');
+  if (!currentUser) {
+    bar.innerHTML = '';
+    sub.style.display = '';
+    document.getElementById('nav-tabs').style.display = 'none';
+    document.getElementById('basket-bar').style.display = 'none';
+    return;
+  }
+  const name = userProfile?.display_name || currentUser.user_metadata?.full_name || currentUser.email || 'User';
+  const initial = name.charAt(0).toUpperCase();
+  bar.innerHTML = `
+    <div class="user-avatar">${esc(initial)}</div>
+    <div class="user-name">${esc(name)}</div>
+    <button class="btn-text" onclick="doSignOut()">Sign out</button>
+  `;
+  sub.style.display = 'none';
+  document.getElementById('basket-bar').style.display = '';
+  renderNavTabs(state.phase === 'profile' ? 'profile' : 'planner');
+}
+
+function renderNavTabs(active) {
+  const nav = document.getElementById('nav-tabs');
+  nav.style.display = 'flex';
+  nav.innerHTML = `
+    <div class="nav-tab ${active === 'planner' ? 'active' : ''}" onclick="switchTab('planner')">Meal Planner</div>
+    <div class="nav-tab ${active === 'profile' ? 'active' : ''}" onclick="switchTab('profile')">Profile</div>
+  `;
+}
+
+function switchTab(tab) {
+  if (tab === 'profile') {
+    state.phase = 'profile';
+  } else {
+    state.phase = 'form';
+    state.step = 0;
+  }
+  render();
+  renderNavTabs(tab);
+}
+
+// ── Auth Rendering ────────────────────────────────────────
+const GOOGLE_SVG = '<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>';
+const FACEBOOK_SVG = '<svg viewBox="0 0 24 24"><path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12S0 5.446 0 12.073c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>';
+
+
+function renderAuth() {
+  const isSignUp = state.authView === 'signup';
+  $app.innerHTML = `
+    <div class="auth-view">
+      <div class="auth-title">${isSignUp ? 'Create Account' : 'Welcome to Ugemad'}</div>
+      <div class="auth-subtitle">${isSignUp ? 'Sign up to start planning meals' : 'Sign in to plan your weekly meals'}</div>
+      <div class="auth-social">
+        <button class="auth-social-btn" onclick="doSignInWithProvider('google')">${GOOGLE_SVG} Continue with Google</button>
+        <button class="auth-social-btn" onclick="doSignInWithProvider('facebook')">${FACEBOOK_SVG} Continue with Facebook</button>
+      </div>
+      <div class="auth-divider">or use email</div>
+      <div id="auth-error" class="auth-error"></div>
+      <div class="auth-input">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="you@example.com">
+      </div>
+      <div class="auth-input">
+        <label>Password</label>
+        <input type="password" id="auth-password" placeholder="${isSignUp ? 'Min. 6 characters' : 'Your password'}">
+      </div>
+      ${isSignUp
+        ? `<button class="btn btn-primary" style="width:100%" onclick="doSignUp()">Create Account</button>
+           <div class="auth-link">Already have an account? <a onclick="state.authView='login';render()">Sign in</a></div>`
+        : `<button class="btn btn-primary" style="width:100%" onclick="doSignInWithEmail()">Sign In</button>
+           <div class="auth-link">Don't have an account? <a onclick="state.authView='signup';render()">Create one</a></div>`
+      }
+    </div>
+  `;
+  $bar.innerHTML = '';
+}
+
+function renderProfileSetup() {
+  const name = userProfile?.display_name || currentUser?.user_metadata?.full_name || '';
+  $app.innerHTML = `
+    <div class="profile-view">
+      <div class="question">Set up your profile</div>
+      <div class="hint">These preferences will be pre-loaded every time you plan.</div>
+      <div class="profile-field">
+        <label>Display Name</label>
+        <input type="text" id="prof-name" value="${esc(name)}" placeholder="Your name">
+      </div>
+      <div class="profile-field">
+        <label>Household Size</label>
+        <div class="stepper">
+          <button onclick="adjProf(-1)">&#8722;</button>
+          <div class="value" id="prof-people">${userProfile?.household_size || state.people}</div>
+          <button onclick="adjProf(+1)">&#43;</button>
+        </div>
+      </div>
+      <div class="profile-field">
+        <label>Dietary Preferences</label>
+        <div class="chips">
+          ${DIETS.map(d => `<div class="chip ${(userProfile?.dietary_preferences || state.diets).includes(d)?'selected':''}" onclick="toggleProfDiet(this,'${d}')">${d}</div>`).join('')}
+        </div>
+      </div>
+      <div class="profile-field">
+        <label>Weekly Budget (DKK)</label>
+        <div class="budget-input">
+          <input type="number" id="prof-budget" value="${userProfile?.weekly_budget || state.budget}" min="100" max="5000" step="50">
+          <span>kr</span>
+        </div>
+      </div>
+      <div class="profile-field">
+        <label>Favorite Meals / Ideas</label>
+        <textarea id="prof-meals" placeholder="e.g. pasta, stir fry, soups...">${esc(userProfile?.favorite_meals || state.meals)}</textarea>
+      </div>
+      <div class="actions">
+        ${state.phase === 'profile' ? '<button class="btn btn-secondary" onclick="switchTab(\'planner\')">Cancel</button>' : ''}
+        <button class="btn btn-primary" onclick="saveProfileForm()">Save${state.phase === 'profile' ? '' : ' & Start Planning'}</button>
+      </div>
+    </div>
+  `;
+  $bar.innerHTML = '';
+}
+
+let _profPeople = 0;
+let _profDiets = [];
+
+function adjProf(n) {
+  const el = document.getElementById('prof-people');
+  let v = parseInt(el.textContent) + n;
+  if (v < 1) v = 1; if (v > 20) v = 20;
+  el.textContent = v;
+}
+
+function toggleProfDiet(el, diet) {
+  el.classList.toggle('selected');
+}
+
+async function saveProfileForm() {
+  const name = document.getElementById('prof-name').value.trim();
+  const people = parseInt(document.getElementById('prof-people').textContent);
+  const budget = parseInt(document.getElementById('prof-budget').value) || 500;
+  const meals = document.getElementById('prof-meals').value.trim();
+  const diets = [...document.querySelectorAll('.profile-view .chip.selected')].map(c => c.textContent);
+
+  const profileData = {
+    displayName: name,
+    householdSize: people,
+    dietaryPreferences: diets,
+    weeklyBudget: budget,
+    favoriteMeals: meals,
+    defaultDays: [...ALL_DAYS],
+    defaultNotes: '',
+  };
+
+  await saveProfileData(profileData);
+
+  // Update local state
+  userProfile = { ...userProfile, id: currentUser.id, display_name: profileData.displayName,
+    household_size: profileData.householdSize, dietary_preferences: profileData.dietaryPreferences,
+    weekly_budget: profileData.weeklyBudget, favorite_meals: profileData.favoriteMeals,
+    default_days: profileData.defaultDays, default_notes: profileData.defaultNotes };
+  state.people = people;
+  state.diets = diets;
+  state.budget = budget;
+  state.meals = meals;
+  state.days = [...ALL_DAYS];
+
+  renderUserBar();
+  state.phase = 'form';
+  state.step = 0;
+  render();
 }
 
 // ── LLM Settings ───────────────────────────────────────────
@@ -507,9 +867,7 @@ function toggleLLMPanel() {
 })();
 
 function apiHeaders() {
-  const h = { 'Content-Type': 'application/json' };
-  if (API_TOKEN) h['X-Api-Token'] = API_TOKEN;
-  return h;
+  return { 'Content-Type': 'application/json' };
 }
 
 // ── State ──────────────────────────────────────────────────
@@ -518,7 +876,8 @@ const DIETS = ['Low histamine','Vegetarian','Vegan','Gluten-free','Dairy-free','
 
 const state = {
   step: 0,
-  phase: 'form',
+  phase: 'auth',
+  authView: 'login',
   meals: '', people: 2,
   days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
   diets: [], dietCustom: '', budget: 500, notes: '',
@@ -544,6 +903,8 @@ let pipelineTimer = null;
 let pipelineStep = 0;
 
 function render() {
+  if (state.phase === 'auth') return renderAuth();
+  if (state.phase === 'profile-setup' || state.phase === 'profile') return renderProfileSetup();
   if (state.phase === 'loading') return renderLoading();
   if (state.phase === 'results') return renderResults();
   if (state.phase === 'adding') return renderAdding();
@@ -891,6 +1252,15 @@ function reset() {
     days:['Monday','Tuesday','Wednesday','Thursday','Friday'],
     diets:[], dietCustom:'', budget:500, notes:'',
     mealPlan:[], matched:[], notFound:[], errorMsg:'' });
+  // Re-apply saved preferences from profile
+  if (userProfile) {
+    state.people = userProfile.householdSize || 2;
+    state.diets = userProfile.dietaryPreferences || [];
+    state.budget = userProfile.weeklyBudget || 500;
+    state.meals = userProfile.favoriteMeals || '';
+    state.days = (userProfile.defaultDays && userProfile.defaultDays.length > 0) ? userProfile.defaultDays : [...ALL_DAYS];
+    state.notes = userProfile.defaultNotes || '';
+  }
   render();
 }
 
@@ -974,29 +1344,43 @@ async function submit() {
 
 async function submitWithNotes(notes) {
   const diet = [...state.diets, state.dietCustom].filter(Boolean).join(', ');
-  try {
-    const base = getN8nBase();
-    const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 300000); // 5 min timeout
-    const resp = await fetch(`${base}/webhook/meal-plan${tp}`, {
-      method: 'POST', headers: apiHeaders(),
-      body: JSON.stringify({ meals: state.meals, people: state.people, days: state.days.join(', '), diet, budget: state.budget, notes, llmConfig: getLLMConfig() }),
-      signal: ctrl.signal,
-    });
-    clearTimeout(timeout);
-    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
-    const data = await resp.json();
-    state.mealPlan = data.mealPlan || [];
-    state.matched = (data.matched || []).map(m => ({ ...m, _removed: false }));
-    state.notFound = data.notFound || [];
-    state.totalPrice = data.totalPrice || 0;
-    state.remaining = (state.budget || 500) - state.totalPrice;
-    state.phase = 'results';
-  } catch (e) {
-    state.errorMsg = e.message || 'Network error';
-    state.phase = 'error';
+  const base = getN8nBase();
+  const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
+  const payload = JSON.stringify({ meals: state.meals, people: state.people, days: state.days.join(', '), diet, budget: state.budget, notes, llmConfig: getLLMConfig() });
+
+  // Safari iOS kills long fetch requests — retry up to 3 times
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (attempt > 0) {
+        const el = document.getElementById('pipe-detail-prompt');
+        if (el) el.textContent = `Retrying... (attempt ${attempt + 1}/3)`;
+      }
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 300000);
+      const resp = await fetch(`${base}/webhook/meal-plan${tp}`, {
+        method: 'POST', headers: apiHeaders(), body: payload, signal: ctrl.signal,
+      });
+      clearTimeout(timeout);
+      if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+      const data = await resp.json();
+      state.mealPlan = data.mealPlan || [];
+      state.matched = (data.matched || []).map(m => ({ ...m, _removed: false }));
+      state.notFound = data.notFound || [];
+      state.totalPrice = data.totalPrice || 0;
+      state.remaining = (state.budget || 500) - state.totalPrice;
+      state.phase = 'results';
+      render();
+      return;
+    } catch (e) {
+      lastErr = e;
+      if (e.name === 'AbortError') break; // manual abort, don't retry
+      // Wait 1s before retry
+      await new Promise(r => setTimeout(r, 1000));
+    }
   }
+  state.errorMsg = lastErr?.message || 'Network error';
+  state.phase = 'error';
   render();
 }
 
@@ -1136,9 +1520,6 @@ async function clearBasketQuick() {
   } catch (e) { /* silent */ }
 }
 
-// Fetch basket on load
-fetchBasket();
-
 // ── Keyboard ───────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
   if (state.phase !== 'form') return;
@@ -1153,7 +1534,51 @@ document.addEventListener('keydown', (e) => {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-render();
+// ── Auth Bootstrap ─────────────────────────────────────────
+(async function authBootstrap() {
+  if (!sb) { render(); return; }
+
+  // Listen for auth state changes (handles OAuth redirects + session restore)
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      currentUser = session.user;
+      await loadProfile(currentUser.id);
+      renderUserBar();
+      if (state.phase === 'auth') {
+        if (!userProfile?.display_name) {
+          state.phase = 'profile-setup';
+        } else {
+          state.phase = 'form';
+          fetchBasket();
+        }
+        render();
+      }
+    } else if (event === 'SIGNED_OUT') {
+      currentUser = null;
+      userProfile = null;
+      state.phase = 'auth';
+      state.authView = 'login';
+      renderUserBar();
+      render();
+    }
+  });
+
+  // Check for existing session
+  const { data: { user } } = await sb.auth.getUser();
+  if (user) {
+    currentUser = user;
+    await loadProfile(user.id);
+    renderUserBar();
+    if (!userProfile?.display_name) {
+      state.phase = 'profile-setup';
+    } else {
+      state.phase = 'form';
+      fetchBasket();
+    }
+  }
+
+  render();
+})();
 </script>
 </body>
 </html>
