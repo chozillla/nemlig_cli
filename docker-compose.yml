@@ -12,6 +12,9 @@ services:
       - GENERIC_TIMEZONE=Europe/Copenhagen
       - TZ=Europe/Copenhagen
       - N8N_SECURE_COOKIE=false
+      - NEMLIG_USER=${NEMLIG_USER}
+      - NEMLIG_PASS=${NEMLIG_PASS}
+      - API_TOKEN=${API_TOKEN}
       - NODE_FUNCTION_ALLOW_BUILTIN=crypto
       - NODE_FUNCTION_ALLOW_EXTERNAL=axios
       - N8N_RUNNERS_MAX_OLD_SPACE_SIZE=512

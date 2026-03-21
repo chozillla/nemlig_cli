@@ -294,6 +294,62 @@ textarea { resize: vertical; min-height: 100px; }
 /* ── Error ──────────────────── */
 .error-msg { background: var(--red-bg); color: var(--red); padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.875rem; margin-top: 1rem; }
 
+/* ── Settings panel ─────────── */
+.settings-panel {
+  max-height: 0; overflow: hidden; transition: max-height 0.35s ease;
+  border-top: 1px solid var(--bg); margin-top: 0.75rem;
+}
+.settings-panel.open { max-height: 600px; padding-top: 0.75rem; }
+.settings-row { margin-bottom: 0.625rem; }
+.settings-label {
+  font-size: 0.6875rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.125rem;
+}
+.settings-row select, .settings-row input[type="text"], .settings-row input[type="password"] {
+  width: 100%; padding: 0.4375rem 0.625rem; border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 0.8125rem; font-family: inherit;
+  background: var(--bg); color: var(--text); outline: none;
+}
+.settings-row select:focus, .settings-row input:focus { border-color: var(--green); }
+.settings-hint { font-size: 0.625rem; color: var(--border); margin-top: 0.125rem; }
+.provider-badge {
+  display: inline-block; font-size: 0.5625rem; padding: 0.0625rem 0.375rem;
+  border-radius: 3px; background: var(--bg); color: var(--muted);
+  border: 1px solid var(--border); vertical-align: middle;
+}
+
+/* ── Basket viewer ──────────── */
+.basket-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--card); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 0.625rem 1rem; margin-bottom: 0.75rem; cursor: pointer;
+  transition: all 0.15s; font-size: 0.8125rem;
+}
+.basket-bar:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.basket-count {
+  background: var(--green); color: white; font-size: 0.6875rem; font-weight: 700;
+  padding: 0.125rem 0.5rem; border-radius: 99px; margin-left: 0.5rem;
+}
+.basket-count.empty { background: var(--border); }
+.basket-total { font-weight: 600; color: var(--green); }
+.basket-panel {
+  max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+  background: var(--card); border-radius: 0 0 10px 10px;
+  margin-top: -0.75rem; margin-bottom: 0.75rem;
+  box-shadow: var(--shadow);
+}
+.basket-panel.open { max-height: 500px; overflow-y: auto; }
+.basket-panel-inner { padding: 0 1rem 0.75rem; }
+.basket-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.375rem 0; font-size: 0.75rem; border-top: 1px solid var(--bg);
+}
+.basket-item:first-child { border-top: none; }
+.basket-item .name { flex: 1; }
+.basket-item .qty { color: var(--muted); margin: 0 0.5rem; }
+.basket-item .price { font-weight: 500; font-variant-numeric: tabular-nums; }
+.basket-actions { display: flex; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+
 /* ── Print / PDF ────────────── */
 @media print {
   body { background: white; padding: 0; }
@@ -314,8 +370,51 @@ textarea { resize: vertical; min-height: 100px; }
 <div class="container">
   <header>
     <h1>Meal Planner</h1>
-    <p class="sub">nemlig.com</p>
+    <p class="sub">nemlig.com &middot; <span id="provider-display" style="cursor:pointer" onclick="toggleLLMPanel()">Azure OpenAI</span> &middot; <label style="cursor:pointer;user-select:none"><input type="checkbox" id="dev-mode" onchange="toggleDevMode()" style="vertical-align:middle"> Dev</label></p>
   </header>
+
+  <div id="settings" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;margin-bottom:0.75rem">
+    <div class="card" style="padding:1.25rem">
+      <div class="settings-row">
+        <div class="settings-label">Provider</div>
+        <select id="llm-provider" onchange="onProviderChange()">
+          <option value="azure">Azure OpenAI</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic Claude</option>
+          <option value="ollama">Ollama (local)</option>
+          <option value="custom">Custom (OpenAI-compatible)</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Endpoint</div>
+        <input type="text" id="llm-endpoint" placeholder="https://api.openai.com">
+        <div class="settings-hint" id="endpoint-hint">Leave empty for default</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Model</div>
+        <input type="text" id="llm-model" placeholder="gpt-4o">
+      </div>
+      <div class="settings-row" id="apikey-row">
+        <div class="settings-label">API Key</div>
+        <input type="password" id="llm-apikey" placeholder="sk-...">
+        <div class="settings-hint">Stored in your browser only</div>
+      </div>
+      <div style="text-align:right;margin-top:0.5rem">
+        <button class="btn btn-primary" style="flex:none;padding:0.375rem 1rem;font-size:0.8125rem" onclick="saveLLMSettings();toggleLLMPanel()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="basket-bar no-print" onclick="toggleBasket()">
+    <div>Basket <span class="basket-count empty" id="basket-count">0</span></div>
+    <div style="text-align:right">
+      <div class="basket-total" id="basket-total">0.00 kr</div>
+      <div style="font-size:0.625rem;color:var(--muted)" id="basket-delivery"></div>
+    </div>
+  </div>
+  <div class="basket-panel no-print" id="basket-panel">
+    <div class="basket-panel-inner" id="basket-items"></div>
+  </div>
 
   <div class="card">
     <div id="app"></div>
@@ -340,6 +439,73 @@ function getN8nBase() {
   return new URLSearchParams(location.search).get('n8n') || localStorage.getItem('n8n_url') || DEFAULT_N8N;
 }
 
+// ── LLM Settings ───────────────────────────────────────────
+const PROVIDER_DEFAULTS = {
+  azure:     { endpoint: '', model: 'gpt-5.2', needsKey: true, hint: 'e.g. https://your-resource.openai.azure.com' },
+  openai:    { endpoint: '', model: 'gpt-4o', needsKey: true, hint: 'Leave empty for api.openai.com' },
+  anthropic: { endpoint: '', model: 'claude-sonnet-4-20250514', needsKey: true, hint: 'Leave empty for api.anthropic.com' },
+  ollama:    { endpoint: 'http://localhost:11434', model: 'llama3', needsKey: false, hint: 'Your Ollama server address' },
+  custom:    { endpoint: 'http://localhost:1234', model: 'default', needsKey: false, hint: 'Any OpenAI-compatible endpoint (LM Studio, vLLM, Groq, Together...)' },
+};
+
+function loadLLMSettings() {
+  try { return JSON.parse(localStorage.getItem('llm_settings') || 'null'); } catch { return null; }
+}
+
+function saveLLMSettings() {
+  const settings = {
+    provider: document.getElementById('llm-provider').value,
+    endpoint: document.getElementById('llm-endpoint').value.replace(/\/+$/, ''),
+    model: document.getElementById('llm-model').value,
+    apiKey: document.getElementById('llm-apikey').value,
+  };
+  localStorage.setItem('llm_settings', JSON.stringify(settings));
+  updateProviderBadge();
+}
+
+function getLLMConfig() {
+  return loadLLMSettings() || { provider: 'azure', endpoint: '', model: '', apiKey: '' };
+}
+
+function onProviderChange() {
+  const p = document.getElementById('llm-provider').value;
+  const def = PROVIDER_DEFAULTS[p];
+  document.getElementById('llm-model').placeholder = def.model;
+  document.getElementById('llm-endpoint').placeholder = def.endpoint || def.hint;
+  document.getElementById('endpoint-hint').textContent = def.hint;
+  document.getElementById('apikey-row').style.display = def.needsKey ? '' : 'none';
+  // Pre-fill if empty
+  if (!document.getElementById('llm-model').value) document.getElementById('llm-model').value = '';
+  if (!document.getElementById('llm-endpoint').value) document.getElementById('llm-endpoint').value = '';
+}
+
+function updateProviderBadge() {
+  const cfg = getLLMConfig();
+  const el = document.getElementById('provider-display');
+  const names = { azure: 'Azure OpenAI', openai: 'OpenAI', anthropic: 'Anthropic Claude', ollama: 'Ollama (local)', custom: 'Custom' };
+  el.textContent = (names[cfg.provider] || cfg.provider) + (cfg.model ? '  /  ' + cfg.model : '');
+}
+
+function toggleLLMPanel() {
+  const panel = document.getElementById('settings');
+  if (panel.style.maxHeight === '0px' || !panel.style.maxHeight) {
+    panel.style.maxHeight = '400px';
+  } else {
+    panel.style.maxHeight = '0px';
+  }
+}
+
+// Initialize settings UI from saved config
+(function initSettings() {
+  const cfg = getLLMConfig();
+  document.getElementById('llm-provider').value = cfg.provider || 'azure';
+  document.getElementById('llm-endpoint').value = cfg.endpoint || '';
+  document.getElementById('llm-model').value = cfg.model || '';
+  document.getElementById('llm-apikey').value = cfg.apiKey || '';
+  onProviderChange();
+  updateProviderBadge();
+})();
+
 function apiHeaders() {
   const h = { 'Content-Type': 'application/json' };
   if (API_TOKEN) h['X-Api-Token'] = API_TOKEN;
@@ -354,7 +520,7 @@ const state = {
   step: 0,
   phase: 'form',
   meals: '', people: 2,
-  days: ['Monday','Tuesday','Wednesday','Thursday','Friday'],
+  days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
   diets: [], dietCustom: '', budget: 500, notes: '',
   mealPlan: [], matched: [], notFound: [],
   totalPrice: 0, remaining: 0,
@@ -474,7 +640,7 @@ function getPipeline() {
   return [
     { id: 'prompt', icon: '1', title: 'Sending your request',
       detail: `${state.people} people \u00b7 ${state.days.length} days \u00b7 ${state.budget} kr${diet ? ' \u00b7 ' + diet : ''}` },
-    { id: 'ai', icon: '2', title: 'GPT-5.2 is designing your menu',
+    { id: 'ai', icon: '2', title: `${(() => { const c = getLLMConfig(); const n = {azure:'Azure OpenAI',openai:'OpenAI',anthropic:'Claude',ollama:'Ollama',custom:'LLM'}; return (n[c.provider]||'AI') + (c.model ? ' ('+c.model+')' : ''); })()} is designing your menu`,
       detail: `Analyzing "${state.meals.substring(0, 50)}${state.meals.length > 50 ? '\u2026' : ''}"` },
     { id: 'login', icon: '3', title: 'Connecting to nemlig.com',
       detail: 'Authenticating & fetching session...' },
@@ -603,7 +769,7 @@ function renderResults() {
       if (m.recipe && m.recipe.length) {
         html += `<div class="recipe-steps" id="${rid}">`;
         for (let si = 0; si < m.recipe.length; si++) {
-          html += `<div class="recipe-step"><strong>${si+1}.</strong> ${esc(m.recipe[si])}</div>`;
+          html += `<div class="recipe-step"><strong>${si+1}.</strong> ${esc(m.recipe[si]).replace(/\n/g, '<br>')}</div>`;
         }
         html += `</div>`;
       }
@@ -653,7 +819,8 @@ function renderResults() {
   html += `</div>`;
 
   html += `<div class="actions" style="margin-top:1.25rem">
-    <button class="btn btn-secondary no-print" onclick="printPDF()" style="flex:0.5">PDF</button>
+    <button class="btn btn-secondary no-print" onclick="printPDF()" style="flex:0.4">PDF</button>
+    <button class="btn btn-danger no-print" onclick="clearBasket()" style="flex:0.5">Clear Basket</button>
     <button class="btn btn-primary" onclick="approve()">Add to Basket</button>
   </div>`;
   html += `</div>`;
@@ -727,6 +894,25 @@ function reset() {
   render();
 }
 
+// ── Dev mode ────────────────────────────────────────────────
+function toggleDevMode() {
+  const on = document.getElementById('dev-mode').checked;
+  if (on) {
+    state.meals = 'Meals that are made from organic ingredients, ideally in season in Denmark, and compatible with a low histamine diet. I need to loose weight, while my partner often needs to carb load for his workouts, so each meal should accomodate this. I dont want to cook every day, so suggest meals that can atleast cover dinner for two days or makes multiple portions that can be frozen as meal prep.';
+    state.people = 2;
+    state.days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    state.diets = ['Low histamine'];
+    state.budget = 800;
+    state.notes = '';
+  } else {
+    state.meals = '';
+    state.diets = [];
+    state.budget = 500;
+    state.notes = '';
+  }
+  render();
+}
+
 // ── Refine & edit ──────────────────────────────────────────
 let activeRefineChips = [];
 
@@ -791,10 +977,14 @@ async function submitWithNotes(notes) {
   try {
     const base = getN8nBase();
     const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 300000); // 5 min timeout
     const resp = await fetch(`${base}/webhook/meal-plan${tp}`, {
       method: 'POST', headers: apiHeaders(),
-      body: JSON.stringify({ meals: state.meals, people: state.people, days: state.days.join(', '), diet, budget: state.budget, notes }),
+      body: JSON.stringify({ meals: state.meals, people: state.people, days: state.days.join(', '), diet, budget: state.budget, notes, llmConfig: getLLMConfig() }),
+      signal: ctrl.signal,
     });
+    clearTimeout(timeout);
     if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
     const data = await resp.json();
     state.mealPlan = data.mealPlan || [];
@@ -825,12 +1015,129 @@ async function approve() {
     state.addedCount = data.added || 0;
     state.failedCount = data.failed || 0;
     state.phase = 'done';
+    fetchBasket();
   } catch (e) {
     state.errorMsg = e.message || 'Failed to add items.';
     state.phase = 'error';
   }
   render();
 }
+
+async function clearBasket() {
+  if (!confirm('Clear your entire nemlig.com basket?')) return;
+  state.phase = 'adding'; render();
+  $app.innerHTML = `<div class="pipeline"><div class="pipe-step active">
+    <div class="pipe-icon" style="animation:pulse-ring 1.5s ease infinite;border-color:var(--red);color:var(--red)">...</div>
+    <div class="pipe-body"><div class="pipe-title">Clearing your basket</div>
+    <div class="pipe-detail" style="max-height:3rem;opacity:1">Removing all items from nemlig.com...</div></div>
+  </div></div>`;
+  try {
+    const base = getN8nBase();
+    const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
+    const resp = await fetch(`${base}/webhook/meal-plan-approve${tp}`, {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ action: 'clear' }),
+    });
+    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+    const data = await resp.json();
+    state.phase = 'results';
+    render();
+    alert('Basket cleared!');
+  } catch (e) {
+    state.errorMsg = e.message || 'Failed to clear basket.';
+    state.phase = 'error';
+    render();
+  }
+}
+
+// ── Basket viewer ──────────────────────────────────────────
+let basketData = { items: [], count: 0, total: 0 };
+
+async function fetchBasket() {
+  try {
+    const base = getN8nBase();
+    const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
+    const resp = await fetch(`${base}/webhook/meal-plan-approve${tp}`, {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ action: 'view' }),
+    });
+    if (!resp.ok) return;
+    basketData = await resp.json();
+    updateBasketUI();
+  } catch (e) { /* silent */ }
+}
+
+function updateBasketUI() {
+  const countEl = document.getElementById('basket-count');
+  const totalEl = document.getElementById('basket-total');
+  const itemsEl = document.getElementById('basket-items');
+  if (!countEl) return;
+
+  countEl.textContent = basketData.count || 0;
+  countEl.className = 'basket-count' + (basketData.count ? '' : ' empty');
+  totalEl.textContent = (basketData.total || 0).toFixed(2) + ' kr';
+
+  const delBarEl = document.getElementById('basket-delivery');
+  const del2 = basketData.delivery;
+  if (delBarEl && del2 && del2.time) {
+    delBarEl.innerHTML = del2.time + (del2.free ? ' &middot; <span style="color:var(--green)">gratis levering</span>' : '');
+  }
+
+  let html = '';
+
+  // Delivery info
+  const del = basketData.delivery;
+  if (del && del.time) {
+    const freeTag = del.free ? ' <span style="color:var(--green);font-weight:600">GRATIS</span>' : ` ${(del.price||0).toFixed(2)} kr`;
+    html += `<div style="padding:0.5rem 0;font-size:0.75rem;border-bottom:1px solid var(--bg);display:flex;justify-content:space-between;align-items:center">
+      <span>Delivery: ${esc(del.time)}</span><span>${freeTag}</span>
+    </div>`;
+  }
+
+  if (basketData.items && basketData.items.length) {
+    for (const item of basketData.items) {
+      html += `<div class="basket-item">
+        <span class="name">${esc(item.name)}</span>
+        <span class="qty">&times;${item.qty}</span>
+        <span class="price">${(item.price || 0).toFixed(2)} kr</span>
+      </div>`;
+    }
+    html += `<div class="basket-actions">
+      <button class="btn btn-danger" style="flex:1;padding:0.375rem;font-size:0.75rem" onclick="event.stopPropagation();clearBasketQuick()">Clear All</button>
+      <a href="https://www.nemlig.com/checkout" target="_blank" class="btn btn-primary" style="flex:1;padding:0.375rem;font-size:0.75rem;text-align:center;text-decoration:none;color:white">Checkout</a>
+    </div>`;
+  } else {
+    html += '<div style="text-align:center;color:var(--muted);padding:0.5rem;font-size:0.75rem">Basket is empty</div>';
+  }
+  itemsEl.innerHTML = html;
+}
+
+function toggleBasket() {
+  const panel = document.getElementById('basket-panel');
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+  } else {
+    panel.classList.add('open');
+    fetchBasket();
+  }
+}
+
+async function clearBasketQuick() {
+  if (!confirm('Clear your entire nemlig.com basket?')) return;
+  try {
+    const base = getN8nBase();
+    const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
+    await fetch(`${base}/webhook/meal-plan-approve${tp}`, {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ action: 'clear' }),
+    });
+    basketData = { items: [], count: 0, total: 0 };
+    updateBasketUI();
+  } catch (e) { /* silent */ }
+}
+
+// Fetch basket on load
+fetchBasket();
 
 // ── Keyboard ───────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {

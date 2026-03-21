@@ -24,3 +24,8 @@ Thumbs.db
 
 # Credentials
 .env
+.claude/settings.local.json
+
+# n8n workflow files contain credentials locally - push only to nemligAgent repo (cleaned)
+n8n_meal_plan_workflow.json
+n8n_meal_plan_approve.json
