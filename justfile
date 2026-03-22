@@ -115,6 +115,34 @@ list-sync:
     echo '> uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "***" list sync'
     uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" list sync
 
+# ── Meal Planner Web ──────────────────────────
+
+# Start local dev server (http://localhost:8000/meal-planner)
+dev:
+    uv run python server.py
+
+# Deploy to production (ugemad.dk)
+deploy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "$(git status --porcelain server.py index.html meal-planner.html)" ]; then
+        echo "⚠ Uncommitted changes in server files. Commit first or they won't be deployed."
+        echo "  Changed: $(git status --porcelain server.py index.html meal-planner.html | awk '{print $2}' | tr '\n' ' ')"
+        read -p "Deploy anyway from working directory? [y/N] " yn
+        case "$yn" in [Yy]*) ;; *) echo "Aborted."; exit 1;; esac
+    fi
+    bash deploy-azure.sh
+
+# Show production logs
+logs CONTAINER="server":
+    az container logs -g rg-n8n -n mealplanner --container-name {{CONTAINER}}
+
+# Restart production
+restart:
+    az container restart -g rg-n8n -n mealplanner
+
+# ── CLI ──────────────────────────────────────
+
 # 🤖 AI meal planner - guided survey (use --cli for free-text chat)
 plan *FLAGS:
     uv run python nemlig_cli.py plan {{FLAGS}}
