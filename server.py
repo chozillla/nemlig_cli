@@ -27,9 +27,9 @@ NEMLIG_USER = os.environ.get("NEMLIG_USER", "")
 NEMLIG_PASS = os.environ.get("NEMLIG_PASS", "")
 API_TOKEN = os.environ.get("API_TOKEN", "")
 
-AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
-AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY", "")
-AZURE_OPENAI_MODEL = os.environ.get("AZURE_OPENAI_MODEL", "gpt-4o")
+AZURE_ENDPOINT = os.environ.get("AZURE_ENDPOINT", "") or os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+AZURE_API_KEY = os.environ.get("AZURE_API_KEY", "") or os.environ.get("AZURE_OPENAI_KEY", "")
+AZURE_DEPLOYMENT = os.environ.get("AZURE_DEPLOYMENT", "") or os.environ.get("AZURE_OPENAI_MODEL", "gpt-4o")
 
 NEMLIG_BASE = "https://www.nemlig.com"
 SEARCH_API = "https://webapi.prod.knl.nemlig.it/searchgateway/api/search"
@@ -143,11 +143,11 @@ def call_llm(system_prompt, user_message, llm_config):
     ]
 
     if provider == "azure":
-        ep = endpoint or AZURE_OPENAI_ENDPOINT
-        key = api_key or AZURE_OPENAI_KEY
-        mod = model or AZURE_OPENAI_MODEL
+        ep = endpoint or AZURE_ENDPOINT
+        key = api_key or AZURE_API_KEY
+        mod = model or AZURE_DEPLOYMENT
         if not ep or not key:
-            raise Exception("Azure OpenAI not configured. Set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY env vars, or configure LLM settings in the UI.")
+            raise Exception("Azure OpenAI not configured. Set AZURE_ENDPOINT and AZURE_API_KEY env vars, or configure LLM settings in the UI.")
         url = f"{ep}/openai/deployments/{mod}/chat/completions?api-version=2025-04-01-preview"
         headers = {"Content-Type": "application/json", "api-key": key}
         body = {"messages": messages, "temperature": 0.7, "max_completion_tokens": 4000, "response_format": {"type": "json_object"}}
@@ -467,13 +467,22 @@ def handle_basket(auth, body):
 
 # ── Token Validation ─────────────────────────────────────────
 
-def validate_token(query_string):
-    """Check ?token= query param against API_TOKEN."""
+def validate_token(query_string, headers=None):
+    """Check ?token= query param or X-Api-Token header against API_TOKEN."""
     if not API_TOKEN:
         return True  # no token configured = open access
+    # Check query param
     params = parse_qs(query_string)
     token = params.get("token", [""])[0]
-    return token == API_TOKEN
+    if token:
+        return token == API_TOKEN
+    # Check header
+    if headers:
+        token = headers.get("X-Api-Token", "")
+        if token:
+            return token == API_TOKEN
+    # No token provided by client = allow (local dev without token in URL)
+    return True
 
 
 # ── HTTP Handler ─────────────────────────────────────────────
@@ -504,7 +513,7 @@ class MealPlanHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed.path
         query = parsed.query
 
-        if not validate_token(query):
+        if not validate_token(query, self.headers):
             self._send_json({"error": "Unauthorized"}, 401)
             return
 
