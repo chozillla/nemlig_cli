@@ -27,6 +27,62 @@ body {
   overflow-x: hidden;
 }
 
+/* ── Language switcher ──────────────────────── */
+.lang-switch {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 100;
+  display: flex;
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.lang-btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lang-btn.active {
+  background: rgba(255,255,255,0.95);
+  color: var(--primary);
+  border-radius: 99px;
+}
+
+.lang-btn:not(.active):hover {
+  color: white;
+  background: rgba(255,255,255,0.1);
+}
+
+/* Scrolled state — dark buttons on white sections */
+.lang-switch.scrolled {
+  background: rgba(0,0,0,0.06);
+  border-color: var(--border);
+}
+
+.lang-switch.scrolled .lang-btn {
+  color: var(--muted);
+}
+
+.lang-switch.scrolled .lang-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.lang-switch.scrolled .lang-btn:not(.active):hover {
+  color: var(--text);
+  background: rgba(0,0,0,0.04);
+}
+
 /* ── Hero ───────────────────────────────────── */
 .hero {
   min-height: 100dvh;
@@ -354,74 +410,81 @@ footer a {
   .how-it-works { padding: 4rem 1.25rem; }
   .cta-section { padding: 4rem 1.25rem; }
   .features-grid { grid-template-columns: 1fr; }
+  .lang-switch { top: 0.75rem; right: 0.75rem; }
 }
 </style>
 </head>
 <body>
 
+<!-- Language switcher -->
+<div class="lang-switch" id="langSwitch">
+  <button class="lang-btn active" onclick="setLang('da')">DA</button>
+  <button class="lang-btn" onclick="setLang('en')">EN</button>
+</div>
+
 <!-- Hero -->
 <section class="hero">
   <div class="hero-content">
-    <div class="hero-badge">AI-powered madplanlægning</div>
-    <h1>Din uge starter med <span>Ugemad</span></h1>
-    <p>Få en skræddersyet madplan med opskrifter og indkøbsliste direkte fra nemlig.com — på få sekunder.</p>
+    <div class="hero-badge" data-da="AI-powered madplanlægning" data-en="AI-powered meal planning"></div>
+    <h1 data-da="Din uge starter med <span>Ugemad</span>" data-en="Your week starts with <span>Ugemad</span>"></h1>
+    <p data-da="Få en skræddersyet madplan med opskrifter og indkøbsliste direkte fra nemlig.com — på få sekunder." data-en="Get a tailored meal plan with recipes and a shopping list straight from nemlig.com — in seconds."></p>
     <a href="/meal-planner" class="hero-cta">
-      Kom i gang
+      <span data-da="Kom i gang" data-en="Get started"></span>
       <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"/></svg>
     </a>
   </div>
   <div class="scroll-hint">
-    Scroll ned
+    <span data-da="Scroll ned" data-en="Scroll down"></span>
     <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"/></svg>
   </div>
 </section>
 
 <!-- Features -->
 <section class="features">
-  <h2>Alt du behøver til ugens måltider</h2>
-  <p class="subtitle">Ugemad kombinerer AI med nemlig.com, så du kan fokusere på det vigtige.</p>
+  <h2 data-da="Alt du behøver til ugens måltider" data-en="Everything you need for the week's meals"></h2>
+  <p class="subtitle" data-da="Ugemad kombinerer AI med nemlig.com, så du kan fokusere på det vigtige." data-en="Ugemad combines AI with nemlig.com so you can focus on what matters."></p>
   <div class="features-grid">
     <div class="feature-card">
       <div class="feature-icon blue">🤖</div>
-      <h3>AI-genererede madplaner</h3>
-      <p>Fortæl os om dine præferencer, allergier og budget — så skaber AI'en en komplet ugeplan med opskrifter på dansk og engelsk.</p>
+      <h3 data-da="AI-genererede madplaner" data-en="AI-generated meal plans"></h3>
+      <p data-da="Fortæl os om dine præferencer, allergier og budget — så skaber AI'en en komplet ugeplan med opskrifter på dansk og engelsk." data-en="Tell us your preferences, allergies, and budget — the AI creates a complete weekly plan with recipes in Danish and English."></p>
     </div>
     <div class="feature-card">
       <div class="feature-icon orange">🛒</div>
-      <h3>Direkte til din kurv</h3>
-      <p>Alle ingredienser matches automatisk med produkter på nemlig.com. Godkend planen, og varerne lander i din indkøbskurv.</p>
+      <h3 data-da="Direkte til din kurv" data-en="Straight to your basket"></h3>
+      <p data-da="Alle ingredienser matches automatisk med produkter på nemlig.com. Godkend planen, og varerne lander i din indkøbskurv." data-en="All ingredients are automatically matched to products on nemlig.com. Approve the plan and the items land in your basket."></p>
     </div>
     <div class="feature-card">
       <div class="feature-icon green">💰</div>
-      <h3>Hold dit budget</h3>
-      <p>Sæt et ugebudget, og AI'en planlægger inden for det. Ingen overraskelser ved kassen — kun lækre måltider.</p>
+      <h3 data-da="Hold dit budget" data-en="Stay on budget"></h3>
+      <p data-da="Sæt et ugebudget, og AI'en planlægger inden for det. Ingen overraskelser ved kassen — kun lækre måltider." data-en="Set a weekly budget and the AI plans within it. No surprises at checkout — just delicious meals."></p>
     </div>
   </div>
 </section>
 
 <!-- How it works -->
 <section class="how-it-works">
-  <h2>Sådan virker det</h2>
+  <h2 data-da="Sådan virker det" data-en="How it works"></h2>
   <div class="steps">
     <div class="step">
       <div class="step-num">1</div>
       <div class="step-text">
-        <h3>Fortæl os dine ønsker</h3>
-        <p>Antal personer, ugedage, budget, kostpræferencer og yndlingsretter. Det tager under et minut.</p>
+        <h3 data-da="Fortæl os dine ønsker" data-en="Tell us what you want"></h3>
+        <p data-da="Antal personer, ugedage, budget, kostpræferencer og yndlingsretter. Det tager under et minut." data-en="Number of people, weekdays, budget, dietary preferences, and favourite dishes. Takes under a minute."></p>
       </div>
     </div>
     <div class="step">
       <div class="step-num">2</div>
       <div class="step-text">
-        <h3>AI'en laver din madplan</h3>
-        <p>Du får en komplet ugeplan med opskrifter og en indkøbsliste med priser fra nemlig.com.</p>
+        <h3 data-da="AI'en laver din madplan" data-en="The AI builds your meal plan"></h3>
+        <p data-da="Du får en komplet ugeplan med opskrifter og en indkøbsliste med priser fra nemlig.com." data-en="You get a complete weekly plan with recipes and a shopping list with prices from nemlig.com."></p>
       </div>
     </div>
     <div class="step">
       <div class="step-num">3</div>
       <div class="step-text">
-        <h3>Godkend og bestil</h3>
-        <p>Gennemgå planen, fjern eller tilføj varer, og send det hele til din nemlig.com-kurv med ét klik.</p>
+        <h3 data-da="Godkend og bestil" data-en="Approve and order"></h3>
+        <p data-da="Gennemgå planen, fjern eller tilføj varer, og send det hele til din nemlig.com-kurv med ét klik." data-en="Review the plan, remove or add items, and send it all to your nemlig.com basket with one click."></p>
       </div>
     </div>
   </div>
@@ -429,10 +492,10 @@ footer a {
 
 <!-- CTA -->
 <section class="cta-section">
-  <h2>Klar til nemmere hverdagsmad?</h2>
-  <p>Prøv Ugemad gratis og spar tid på planlægning og indkøb.</p>
+  <h2 data-da="Klar til nemmere hverdagsmad?" data-en="Ready for easier weekday meals?"></h2>
+  <p data-da="Prøv Ugemad gratis og spar tid på planlægning og indkøb." data-en="Try Ugemad for free and save time on planning and shopping."></p>
   <a href="/meal-planner" class="hero-cta">
-    Start din madplan
+    <span data-da="Start din madplan" data-en="Start your meal plan"></span>
     <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"/></svg>
   </a>
 </section>
@@ -441,5 +504,33 @@ footer a {
   <p>Ugemad &copy; 2026 &mdash; <a href="https://ugemad.dk">ugemad.dk</a></p>
 </footer>
 
+<script>
+let lang = localStorage.getItem('ugemad_lang') || 'da';
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('ugemad_lang', l);
+  document.documentElement.lang = l;
+  document.querySelectorAll('[data-da]').forEach(el => {
+    el.innerHTML = el.getAttribute('data-' + l);
+  });
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.trim() === l.toUpperCase());
+  });
+  document.title = l === 'da' ? 'Ugemad \u2014 Din ugentlige madplan' : 'Ugemad \u2014 Your weekly meal plan';
+}
+
+// Adapt switcher style based on scroll position
+const sw = document.getElementById('langSwitch');
+const hero = document.querySelector('.hero');
+function updateSwitcherStyle() {
+  const heroBottom = hero.getBoundingClientRect().bottom;
+  sw.classList.toggle('scrolled', heroBottom < 60);
+}
+window.addEventListener('scroll', updateSwitcherStyle, { passive: true });
+
+// Init
+setLang(lang);
+</script>
 </body>
 </html>
