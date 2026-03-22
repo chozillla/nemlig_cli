@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ugemad — Din ugentlige madplan</title>
+<meta name="description" content="AI-powered ugentlig madplanlægning med nemlig.com integration. Spar tid og penge på dine indkøb.">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --primary: #2a6496;
+  --primary-hover: #1e4f78;
+  --primary-light: #dae8f5;
+  --accent: #e8913a;
+  --text: #1f2328;
+  --muted: #656d76;
+  --light: #f6f8fa;
+  --card: #ffffff;
+  --border: #d0d7de;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── Hero ───────────────────────────────────── */
+.hero {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: linear-gradient(135deg, #1a3a5c 0%, #2a6496 50%, #3a7ab8 100%);
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 50%, rgba(232,145,58,0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255,255,255,0.08) 0%, transparent 40%),
+    radial-gradient(circle at 60% 80%, rgba(255,255,255,0.05) 0%, transparent 40%);
+}
+
+.hero-content {
+  position: relative;
+  text-align: center;
+  padding: 2rem;
+  max-width: 720px;
+  animation: fadeUp 0.8s ease;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-badge {
+  display: inline-block;
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 99px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.9);
+  margin-bottom: 2rem;
+  letter-spacing: 0.03em;
+}
+
+.hero h1 {
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  font-weight: 800;
+  color: white;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 1.5rem;
+}
+
+.hero h1 span {
+  background: linear-gradient(135deg, #e8913a, #f0b060);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero p {
+  font-size: clamp(1.125rem, 2.5vw, 1.375rem);
+  color: rgba(255,255,255,0.8);
+  max-width: 520px;
+  margin: 0 auto 2.5rem;
+  line-height: 1.6;
+}
+
+.hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: white;
+  color: var(--primary);
+  font-size: 1.125rem;
+  font-weight: 700;
+  padding: 1rem 2.5rem;
+  border-radius: 99px;
+  text-decoration: none;
+  transition: all 0.2s;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+}
+
+.hero-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+.hero-cta svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.2s;
+}
+
+.hero-cta:hover svg {
+  transform: translateX(3px);
+}
+
+.scroll-hint {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255,255,255,0.4);
+  font-size: 0.75rem;
+  text-align: center;
+  animation: bounce 2s ease infinite;
+}
+
+.scroll-hint svg {
+  display: block;
+  margin: 0.5rem auto 0;
+  width: 20px;
+  height: 20px;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(8px); }
+}
+
+/* ── Features ───────────────────────────────── */
+.features {
+  padding: 6rem 2rem;
+  background: var(--light);
+}
+
+.features-grid {
+  max-width: 960px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 2rem;
+}
+
+.features h2 {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.features .subtitle {
+  text-align: center;
+  color: var(--muted);
+  font-size: 1.125rem;
+  margin-bottom: 3.5rem;
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.feature-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.02);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.06);
+}
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.feature-icon.blue { background: var(--primary-light); }
+.feature-icon.orange { background: #fef0e0; }
+.feature-icon.green { background: #e6f4ea; }
+
+.feature-card h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.feature-card p {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* ── How it works ───────────────────────────── */
+.how-it-works {
+  padding: 6rem 2rem;
+  background: white;
+}
+
+.how-it-works h2 {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 3.5rem;
+}
+
+.steps {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.step {
+  display: flex;
+  gap: 1.5rem;
+  position: relative;
+  padding-bottom: 2.5rem;
+}
+
+.step:last-child { padding-bottom: 0; }
+
+.step-num {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-size: 1.125rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.step:not(:last-child) .step-num::after {
+  content: '';
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: calc(100% + 2.5rem - 44px);
+  background: var(--border);
+}
+
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 22px;
+  top: 44px;
+  width: 2px;
+  height: calc(100% - 44px);
+  background: var(--border);
+}
+
+.step-text h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  padding-top: 0.5rem;
+}
+
+.step-text p {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* ── CTA Section ────────────────────────────── */
+.cta-section {
+  padding: 6rem 2rem;
+  text-align: center;
+  background: linear-gradient(135deg, #1a3a5c 0%, #2a6496 100%);
+}
+
+.cta-section h2 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 800;
+  color: white;
+  letter-spacing: -0.02em;
+  margin-bottom: 1rem;
+}
+
+.cta-section p {
+  color: rgba(255,255,255,0.75);
+  font-size: 1.125rem;
+  margin-bottom: 2rem;
+}
+
+.cta-section .hero-cta {
+  font-size: 1rem;
+  padding: 0.875rem 2rem;
+}
+
+/* ── Footer ─────────────────────────────────── */
+footer {
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  background: var(--light);
+  border-top: 1px solid var(--border);
+}
+
+footer a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+/* ── Mobile ─────────────────────────────────── */
+@media (max-width: 640px) {
+  .features { padding: 4rem 1.25rem; }
+  .how-it-works { padding: 4rem 1.25rem; }
+  .cta-section { padding: 4rem 1.25rem; }
+  .features-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">AI-powered madplanlægning</div>
+    <h1>Din uge starter med <span>Ugemad</span></h1>
+    <p>Få en skræddersyet madplan med opskrifter og indkøbsliste direkte fra nemlig.com — på få sekunder.</p>
+    <a href="/meal-planner" class="hero-cta">
+      Kom i gang
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"/></svg>
+    </a>
+  </div>
+  <div class="scroll-hint">
+    Scroll ned
+    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"/></svg>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features">
+  <h2>Alt du behøver til ugens måltider</h2>
+  <p class="subtitle">Ugemad kombinerer AI med nemlig.com, så du kan fokusere på det vigtige.</p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon blue">🤖</div>
+      <h3>AI-genererede madplaner</h3>
+      <p>Fortæl os om dine præferencer, allergier og budget — så skaber AI'en en komplet ugeplan med opskrifter på dansk og engelsk.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon orange">🛒</div>
+      <h3>Direkte til din kurv</h3>
+      <p>Alle ingredienser matches automatisk med produkter på nemlig.com. Godkend planen, og varerne lander i din indkøbskurv.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon green">💰</div>
+      <h3>Hold dit budget</h3>
+      <p>Sæt et ugebudget, og AI'en planlægger inden for det. Ingen overraskelser ved kassen — kun lækre måltider.</p>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="how-it-works">
+  <h2>Sådan virker det</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">
+        <h3>Fortæl os dine ønsker</h3>
+        <p>Antal personer, ugedage, budget, kostpræferencer og yndlingsretter. Det tager under et minut.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">
+        <h3>AI'en laver din madplan</h3>
+        <p>Du får en komplet ugeplan med opskrifter og en indkøbsliste med priser fra nemlig.com.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">
+        <h3>Godkend og bestil</h3>
+        <p>Gennemgå planen, fjern eller tilføj varer, og send det hele til din nemlig.com-kurv med ét klik.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2>Klar til nemmere hverdagsmad?</h2>
+  <p>Prøv Ugemad gratis og spar tid på planlægning og indkøb.</p>
+  <a href="/meal-planner" class="hero-cta">
+    Start din madplan
+    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"/></svg>
+  </a>
+</section>
+
+<footer>
+  <p>Ugemad &copy; 2026 &mdash; Bygget med <a href="https://nemlig.com" target="_blank">nemlig.com</a></p>
+</footer>
+
+</body>
+</html>

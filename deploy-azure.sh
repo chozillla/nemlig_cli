@@ -60,12 +60,12 @@ az acr create --resource-group "$RESOURCE_GROUP" --name "$ACR_NAME" --sku Basic 
 # 3. Build Python server image
 echo "[3/$TOTAL_STEPS] Building server image in ACR..."
 TMPDIR_APP=$(mktemp -d)
-cp server.py meal-planner.html "$TMPDIR_APP/"
+cp server.py meal-planner.html index.html "$TMPDIR_APP/"
 cat > "$TMPDIR_APP/Dockerfile" <<'DOCKERFILE'
 FROM python:3.13-slim
 WORKDIR /app
 RUN pip install --no-cache-dir requests
-COPY server.py meal-planner.html ./
+COPY server.py meal-planner.html index.html ./
 EXPOSE 8000
 CMD ["python", "server.py"]
 DOCKERFILE
