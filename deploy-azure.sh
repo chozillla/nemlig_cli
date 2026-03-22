@@ -16,8 +16,8 @@ set -euo pipefail
 # ── Configuration ────────────────────────────────────────────
 RESOURCE_GROUP="rg-n8n"
 LOCATION="northeurope"
-STORAGE_ACCOUNT="mealplanstor$$"
-ACR_NAME="mealplanacr$$"
+STORAGE_ACCOUNT="mealplanstor75922"
+ACR_NAME="mealplanacr75922"
 CADDY_SHARE="caddydata"
 CONTAINER_GROUP="mealplanner"
 DNS_LABEL="nemlig-mealplanner"
