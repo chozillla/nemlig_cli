@@ -553,7 +553,7 @@ async function loadProfile(userId) {
 async function saveProfileData(data) {
   if (!sb || !currentUser) return null;
   try {
-    const { error } = await sb.from('profiles').upsert({
+    const row = {
       id: currentUser.id,
       display_name: data.displayName || '',
       household_size: data.householdSize || 2,
@@ -563,7 +563,10 @@ async function saveProfileData(data) {
       default_days: data.defaultDays || [...ALL_DAYS],
       default_notes: data.defaultNotes || '',
       updated_at: new Date().toISOString(),
-    });
+    };
+    if (data.nemligEmail !== undefined) row.nemlig_email = data.nemligEmail;
+    if (data.nemligPass !== undefined && data.nemligPass) row.nemlig_pass = data.nemligPass;
+    const { error } = await sb.from('profiles').upsert(row);
     if (error) console.warn('Profile save error:', error);
     return !error;
   } catch (e) { console.warn('Failed to save profile:', e); return null; }
@@ -726,6 +729,19 @@ function renderProfileSetup() {
         <label>Favorite Meals / Ideas</label>
         <textarea id="prof-meals" placeholder="e.g. pasta, stir fry, soups...">${esc(userProfile?.favorite_meals || state.meals)}</textarea>
       </div>
+      <div class="profile-field" style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border)">
+        <label style="font-size:1rem;font-weight:700">Connect nemlig.com account</label>
+        <div class="hint" style="margin-bottom:0.75rem">Link your account to add items directly to your nemlig.com basket.</div>
+        <div class="auth-input">
+          <label>nemlig.com Email</label>
+          <input type="email" id="prof-nemlig-email" value="${esc(userProfile?.nemlig_email || '')}" placeholder="your@email.com">
+        </div>
+        <div class="auth-input">
+          <label>nemlig.com Password</label>
+          <input type="password" id="prof-nemlig-pass" value="${userProfile?.nemlig_pass ? '••••••••' : ''}" placeholder="Your nemlig.com password">
+        </div>
+        ${userProfile?.nemlig_email ? '<div style="font-size:0.8125rem;color:var(--green);margin-top:0.25rem">Connected as ' + esc(userProfile.nemlig_email) + '</div>' : ''}
+      </div>
       <div class="actions">
         ${state.phase === 'profile' ? '<button class="btn btn-secondary" onclick="switchTab(\'planner\')">Cancel</button>' : ''}
         <button class="btn btn-primary" onclick="saveProfileForm()">Save${state.phase === 'profile' ? '' : ' & Start Planning'}</button>
@@ -755,6 +771,10 @@ async function saveProfileForm() {
   const budget = parseInt(document.getElementById('prof-budget').value) || 500;
   const meals = document.getElementById('prof-meals').value.trim();
   const diets = [...document.querySelectorAll('.profile-view .chip.selected')].map(c => c.textContent);
+  const nemligEmail = document.getElementById('prof-nemlig-email')?.value?.trim() || '';
+  const nemligPassRaw = document.getElementById('prof-nemlig-pass')?.value || '';
+  // Only update password if user typed a new one (not the placeholder dots)
+  const nemligPass = nemligPassRaw === '••••••••' ? (userProfile?.nemlig_pass || '') : nemligPassRaw;
 
   const profileData = {
     displayName: name,
@@ -764,6 +784,8 @@ async function saveProfileForm() {
     favoriteMeals: meals,
     defaultDays: [...ALL_DAYS],
     defaultNotes: '',
+    nemligEmail,
+    nemligPass,
   };
 
   await saveProfileData(profileData);
@@ -772,7 +794,8 @@ async function saveProfileForm() {
   userProfile = { ...userProfile, id: currentUser.id, display_name: profileData.displayName,
     household_size: profileData.householdSize, dietary_preferences: profileData.dietaryPreferences,
     weekly_budget: profileData.weeklyBudget, favorite_meals: profileData.favoriteMeals,
-    default_days: profileData.defaultDays, default_notes: profileData.defaultNotes };
+    default_days: profileData.defaultDays, default_notes: profileData.defaultNotes,
+    nemlig_email: nemligEmail, nemlig_pass: nemligPass };
   state.people = people;
   state.diets = diets;
   state.budget = budget;
@@ -854,6 +877,12 @@ function toggleLLMPanel() {
 
 function apiHeaders() {
   return { 'Content-Type': 'application/json' };
+}
+
+function nemligPayload(extra) {
+  const creds = userProfile?.nemlig_email && userProfile?.nemlig_pass
+    ? { nemligUser: userProfile.nemlig_email, nemligPass: userProfile.nemlig_pass } : {};
+  return JSON.stringify({ ...extra, ...creds });
 }
 
 // ── State ──────────────────────────────────────────────────
@@ -1344,7 +1373,9 @@ async function submitWithNotes(notes) {
   const diet = [...state.diets, state.dietCustom].filter(Boolean).join(', ');
   const base = getN8nBase();
   const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
-  const payload = JSON.stringify({ meals: state.meals, people: state.people, days: state.days.join(', '), diet, budget: state.budget, notes, llmConfig: getLLMConfig() });
+  const nemligCreds = userProfile?.nemlig_email && userProfile?.nemlig_pass
+    ? { nemligUser: userProfile.nemlig_email, nemligPass: userProfile.nemlig_pass } : {};
+  const payload = JSON.stringify({ meals: state.meals, people: state.people, days: state.days.join(', '), diet, budget: state.budget, notes, llmConfig: getLLMConfig(), ...nemligCreds });
 
   // Safari iOS kills long fetch requests — retry up to 3 times
   let lastErr;
@@ -1390,7 +1421,7 @@ async function approve() {
     const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
     const resp = await fetch(`${base}/webhook/meal-plan-approve${tp}`, {
       method: 'POST', headers: apiHeaders(),
-      body: JSON.stringify({ items }),
+      body: nemligPayload({ items }),
     });
     if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
     const data = await resp.json();
@@ -1418,7 +1449,7 @@ async function clearBasket() {
     const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
     const resp = await fetch(`${base}/webhook/meal-plan-approve${tp}`, {
       method: 'POST', headers: apiHeaders(),
-      body: JSON.stringify({ action: 'clear' }),
+      body: nemligPayload({ action: 'clear' }),
     });
     if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
     const data = await resp.json();
@@ -1441,7 +1472,7 @@ async function fetchBasket() {
     const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
     const resp = await fetch(`${base}/webhook/meal-plan-approve${tp}`, {
       method: 'POST', headers: apiHeaders(),
-      body: JSON.stringify({ action: 'view' }),
+      body: nemligPayload({ action: 'view' }),
     });
     if (!resp.ok) return;
     basketData = await resp.json();
@@ -1511,7 +1542,7 @@ async function clearBasketQuick() {
     const tp = API_TOKEN ? `?token=${API_TOKEN}` : '';
     await fetch(`${base}/webhook/meal-plan-approve${tp}`, {
       method: 'POST', headers: apiHeaders(),
-      body: JSON.stringify({ action: 'clear' }),
+      body: nemligPayload({ action: 'clear' }),
     });
     basketData = { items: [], count: 0, total: 0 };
     updateBasketUI();

@@ -49,8 +49,12 @@ def _common_headers():
     }
 
 
-def nemlig_login():
+def nemlig_login(user=None, passwd=None):
     """Authenticate with nemlig.com. Returns dict with session, bearer, xsrf, search_params."""
+    username = user or NEMLIG_USER
+    password = passwd or NEMLIG_PASS
+    if not username or not password:
+        raise Exception("No nemlig.com credentials. Connect your account in profile settings.")
     s = requests.Session()
     h = _common_headers()
 
@@ -71,8 +75,8 @@ def nemlig_login():
     h["Authorization"] = f"Bearer {bearer}"
     h["Referer"] = f"{NEMLIG_BASE}/login?returnUrl=%2F"
     r = s.post(f"{NEMLIG_BASE}/webapi/login", headers=h, json={
-        "Username": NEMLIG_USER,
-        "Password": NEMLIG_PASS,
+        "Username": username,
+        "Password": password,
         "CheckForExistingProducts": True,
         "DoMerge": True,
         "AppInstalled": False,
@@ -546,8 +550,8 @@ class MealPlanHandler(http.server.SimpleHTTPRequestHandler):
             parsed = parse_ai_response(content)
             print(f"  [meal-plan] {len(parsed['ingredients'])} ingredients, logging into nemlig...")
 
-            # 4. Nemlig auth
-            auth = nemlig_login()
+            # 4. Nemlig auth (use per-user creds if provided)
+            auth = nemlig_login(body.get("nemligUser"), body.get("nemligPass"))
             print(f"  [meal-plan] Searching products...")
 
             # 5. Search & budget
@@ -570,7 +574,7 @@ class MealPlanHandler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_approve(self, body):
         try:
-            auth = nemlig_login()
+            auth = nemlig_login(body.get("nemligUser"), body.get("nemligPass"))
             result = handle_basket(auth, body)
             self._send_json(result)
         except Exception as e:
