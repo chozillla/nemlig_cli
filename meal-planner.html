@@ -578,42 +578,31 @@ async function doSignInWithProvider(provider) {
   if (error) console.error('OAuth error:', error);
 }
 
-async function doSignInWithEmail() {
+async function doMagicLink() {
   if (!sb) return;
   const email = document.getElementById('auth-email')?.value?.trim();
-  const password = document.getElementById('auth-password')?.value;
   const errEl = document.getElementById('auth-error');
-  if (!email || !password) { errEl.textContent = 'Enter email and password.'; errEl.classList.add('show'); return; }
+  const btn = document.getElementById('magic-link-btn');
+  if (!email) { errEl.textContent = 'Enter your email address.'; errEl.classList.add('show'); return; }
 
-  // Try sign in first, then sign up if account doesn't exist
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.href.split('#')[0].split('?')[0] }
+  });
   if (error) {
-    if (error.message.includes('Invalid login')) {
-      errEl.textContent = 'Invalid email or password. Use "Create account" to sign up.';
-    } else {
-      errEl.textContent = error.message;
-    }
+    errEl.textContent = error.message;
     errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'Send magic link';
     return;
   }
-  // Success — onAuthStateChange handles the rest
-}
-
-async function doSignUp() {
-  if (!sb) return;
-  const email = document.getElementById('auth-email')?.value?.trim();
-  const password = document.getElementById('auth-password')?.value;
-  const errEl = document.getElementById('auth-error');
-  if (!email || !password) { errEl.textContent = 'Enter email and password.'; errEl.classList.add('show'); return; }
-  if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.add('show'); return; }
-
-  const { data, error } = await sb.auth.signUp({ email, password });
-  if (error) { errEl.textContent = error.message; errEl.classList.add('show'); return; }
-  if (data.user && !data.session) {
-    errEl.textContent = 'Check your email to confirm your account.';
-    errEl.classList.add('show');
-    errEl.style.color = 'var(--green)';
-  }
+  // Show success state
+  errEl.textContent = 'Check your inbox! Click the link in the email to sign in.';
+  errEl.classList.add('show');
+  errEl.style.color = 'var(--green)';
+  btn.textContent = 'Email sent!';
 }
 
 async function doSignOut() {
@@ -676,35 +665,27 @@ const FACEBOOK_SVG = '<svg viewBox="0 0 24 24"><path fill="#1877F2" d="M24 12.07
 // Enable social providers here once OAuth apps are created in Google/Facebook console
 // Example: { id: 'google', name: 'Google', svg: GOOGLE_SVG }
 const SOCIAL_PROVIDERS = [
+  // Uncomment once OAuth apps are set up in Google/Facebook consoles + Supabase dashboard:
   // { id: 'google', name: 'Google', svg: GOOGLE_SVG },
   // { id: 'facebook', name: 'Facebook', svg: FACEBOOK_SVG },
 ];
 
 function renderAuth() {
-  const isSignUp = state.authView === 'signup';
   $app.innerHTML = `
     <div class="auth-view">
-      <div class="auth-title">${isSignUp ? 'Create Account' : 'Welcome to Ugemad'}</div>
-      <div class="auth-subtitle">${isSignUp ? 'Sign up to start planning meals' : 'Sign in to plan your weekly meals'}</div>
+      <div class="auth-title">Welcome to Ugemad</div>
+      <div class="auth-subtitle">Enter your email to sign in or create an account — no password needed.</div>
       ${SOCIAL_PROVIDERS.length ? `<div class="auth-social">
         ${SOCIAL_PROVIDERS.map(p => `<button class="auth-social-btn" onclick="doSignInWithProvider('${p.id}')">${p.svg} Continue with ${p.name}</button>`).join('')}
       </div>
-      <div class="auth-divider">or use email</div>` : ''}
+      <div class="auth-divider">or</div>` : ''}
       <div id="auth-error" class="auth-error"></div>
       <div class="auth-input">
         <label>Email</label>
-        <input type="email" id="auth-email" placeholder="you@example.com">
+        <input type="email" id="auth-email" placeholder="you@example.com" onkeydown="if(event.key==='Enter'){event.preventDefault();doMagicLink();}">
       </div>
-      <div class="auth-input">
-        <label>Password</label>
-        <input type="password" id="auth-password" placeholder="${isSignUp ? 'Min. 6 characters' : 'Your password'}">
-      </div>
-      ${isSignUp
-        ? `<button class="btn btn-primary" style="width:100%" onclick="doSignUp()">Create Account</button>
-           <div class="auth-link">Already have an account? <a onclick="state.authView='login';render()">Sign in</a></div>`
-        : `<button class="btn btn-primary" style="width:100%" onclick="doSignInWithEmail()">Sign In</button>
-           <div class="auth-link">Don't have an account? <a onclick="state.authView='signup';render()">Create one</a></div>`
-      }
+      <button id="magic-link-btn" class="btn btn-primary" style="width:100%" onclick="doMagicLink()">Send magic link</button>
+      <div class="auth-link" style="margin-top:0.75rem">We'll email you a link to sign in instantly.</div>
     </div>
   `;
   $bar.innerHTML = '';
