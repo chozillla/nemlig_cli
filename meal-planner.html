@@ -6,9 +6,9 @@
 <title>Meal Planner</title>
 <style>
 :root {
-  --green: #1a7f37;
-  --green-hover: #166b2e;
-  --green-bg: #dafbe1;
+  --green: #2a6496;
+  --green-hover: #1e4f78;
+  --green-bg: #dae8f5;
   --red: #cf222e;
   --red-bg: #ffebe9;
   --text: #1f2328;
@@ -168,8 +168,8 @@ textarea { resize: vertical; min-height: 100px; }
   border-color: var(--green); background: var(--green); color: white;
 }
 @keyframes pulse-ring {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(26,127,55,0.3); }
-  50% { box-shadow: 0 0 0 6px rgba(26,127,55,0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(42,100,150,0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(42,100,150,0); }
 }
 .pipe-body { flex: 1; min-width: 0; }
 .pipe-title { font-size: 0.8125rem; font-weight: 600; color: var(--text); }
@@ -446,7 +446,7 @@ textarea { resize: vertical; min-height: 100px; }
 <div class="container">
   <header>
     <h1>Meal Planner</h1>
-    <p class="sub" id="header-sub">nemlig.com &middot; <span id="provider-display" style="cursor:pointer" onclick="toggleLLMPanel()">Azure OpenAI</span> &middot; <label style="cursor:pointer;user-select:none"><input type="checkbox" id="dev-mode" onchange="toggleDevMode()" style="vertical-align:middle"> Dev</label></p>
+    <p class="sub" id="header-sub">nemlig.com &middot; <span id="provider-display" style="cursor:pointer" onclick="toggleLLMPanel()">Azure OpenAI</span><span id="dev-toggle"></span></p>
     <div id="user-bar"></div>
   </header>
   <nav class="nav-tabs" id="nav-tabs"></nav>
@@ -521,8 +521,8 @@ function getN8nBase() {
 
 // ── Supabase Auth ─────────────────────────────────────────
 // TODO: Replace these with your Supabase project values
-const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+const SUPABASE_URL = 'https://qreamprorxtyscatypvv.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_0ZUE_elm6vzB4UNNVNH0Tg_r1E-igug';
 let sb = null;
 let currentUser = null;
 let userProfile = null;
@@ -673,6 +673,12 @@ function switchTab(tab) {
 const GOOGLE_SVG = '<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>';
 const FACEBOOK_SVG = '<svg viewBox="0 0 24 24"><path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12S0 5.446 0 12.073c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>';
 
+// Enable social providers here once OAuth apps are created in Google/Facebook console
+// Example: { id: 'google', name: 'Google', svg: GOOGLE_SVG }
+const SOCIAL_PROVIDERS = [
+  // { id: 'google', name: 'Google', svg: GOOGLE_SVG },
+  // { id: 'facebook', name: 'Facebook', svg: FACEBOOK_SVG },
+];
 
 function renderAuth() {
   const isSignUp = state.authView === 'signup';
@@ -680,11 +686,10 @@ function renderAuth() {
     <div class="auth-view">
       <div class="auth-title">${isSignUp ? 'Create Account' : 'Welcome to Ugemad'}</div>
       <div class="auth-subtitle">${isSignUp ? 'Sign up to start planning meals' : 'Sign in to plan your weekly meals'}</div>
-      <div class="auth-social">
-        <button class="auth-social-btn" onclick="doSignInWithProvider('google')">${GOOGLE_SVG} Continue with Google</button>
-        <button class="auth-social-btn" onclick="doSignInWithProvider('facebook')">${FACEBOOK_SVG} Continue with Facebook</button>
+      ${SOCIAL_PROVIDERS.length ? `<div class="auth-social">
+        ${SOCIAL_PROVIDERS.map(p => `<button class="auth-social-btn" onclick="doSignInWithProvider('${p.id}')">${p.svg} Continue with ${p.name}</button>`).join('')}
       </div>
-      <div class="auth-divider">or use email</div>
+      <div class="auth-divider">or use email</div>` : ''}
       <div id="auth-error" class="auth-error"></div>
       <div class="auth-input">
         <label>Email</label>
@@ -1264,22 +1269,34 @@ function reset() {
   render();
 }
 
-// ── Dev mode ────────────────────────────────────────────────
+// ── Dev mode (localhost only) ────────────────────────────────
+const IS_LOCAL = ['localhost','127.0.0.1'].includes(location.hostname);
+if (IS_LOCAL) {
+  document.getElementById('dev-toggle').innerHTML = ' &middot; <label style="cursor:pointer;user-select:none"><input type="checkbox" id="dev-mode" onchange="toggleDevMode()" style="vertical-align:middle"> Dev</label>';
+}
 function toggleDevMode() {
   const on = document.getElementById('dev-mode').checked;
   if (on) {
+    // Skip auth in dev mode
+    currentUser = { id: 'dev-user', email: 'dev@localhost', user_metadata: { full_name: 'Dev User' } };
+    state.phase = 'form';
     state.meals = 'Meals that are made from organic ingredients, ideally in season in Denmark, and compatible with a low histamine diet. I need to loose weight, while my partner often needs to carb load for his workouts, so each meal should accomodate this. I dont want to cook every day, so suggest meals that can atleast cover dinner for two days or makes multiple portions that can be frozen as meal prep.';
     state.people = 2;
     state.days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     state.diets = ['Low histamine'];
     state.budget = 800;
     state.notes = '';
+    document.getElementById('basket-bar').style.display = '';
   } else {
+    currentUser = null;
+    state.phase = 'auth';
     state.meals = '';
     state.diets = [];
     state.budget = 500;
     state.notes = '';
+    document.getElementById('basket-bar').style.display = 'none';
   }
+  renderUserBar();
   render();
 }
 
