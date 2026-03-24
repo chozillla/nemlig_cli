@@ -469,6 +469,54 @@ def handle_basket(auth, body):
     return {"results": results, "added": added, "failed": failed, "totalItems": len(items)}
 
 
+# ── Order History ────────────────────────────────────────────
+
+def get_order_history(auth, take=5):
+    """Fetch recent orders from nemlig.com."""
+    h = _auth_headers(auth)
+    s = auth["session"]
+
+    r = s.get(f"{NEMLIG_BASE}/webapi/order/GetBasicOrderHistory", headers=h, params={"skip": 0, "take": take})
+    r.raise_for_status()
+    data = r.json()
+    # API may return a list or a dict with an "Orders" key
+    raw_orders = data if isinstance(data, list) else data.get("Orders", data.get("orders", []))
+
+    orders = []
+    for o in raw_orders:
+        order_id = o.get("Id", "")
+        # Fetch line items
+        items = []
+        try:
+            time.sleep(0.3)
+            dr = s.get(f"{NEMLIG_BASE}/webapi/v2/order/GetOrderHistory/{order_id}", headers=h)
+            if dr.ok:
+                detail = dr.json()
+                lines_data = detail.get("Lines", []) if isinstance(detail, dict) else []
+                for line in lines_data:
+                    items.append({
+                        "name": line.get("ProductName", ""),
+                        "quantity": line.get("Quantity", 0),
+                        "price": line.get("Amount", 0),
+                        "productId": line.get("ProductNumber", ""),
+                    })
+        except Exception:
+            pass
+
+        delivery = o.get("DeliveryTime", {})
+        orders.append({
+            "id": order_id,
+            "orderNumber": o.get("OrderNumber", ""),
+            "date": o.get("OrderDate", "").split("T")[0],
+            "total": o.get("Total", 0),
+            "status": o.get("Status", 0),
+            "deliveryDate": delivery.get("Start", "").split("T")[0] if delivery.get("Start") else "",
+            "items": items,
+        })
+
+    return {"orders": orders}
+
+
 # ── Token Validation ─────────────────────────────────────────
 
 def validate_token(query_string, headers=None):
@@ -533,6 +581,8 @@ class MealPlanHandler(http.server.SimpleHTTPRequestHandler):
             self._handle_meal_plan(body)
         elif path == "/webhook/meal-plan-approve":
             self._handle_approve(body)
+        elif path == "/webhook/order-history":
+            self._handle_order_history(body)
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -579,6 +629,15 @@ class MealPlanHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(result)
         except Exception as e:
             print(f"  [approve] ERROR: {e}")
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_order_history(self, body):
+        try:
+            auth = nemlig_login(body.get("nemligUser"), body.get("nemligPass"))
+            result = get_order_history(auth, body.get("take", 5))
+            self._send_json(result)
+        except Exception as e:
+            print(f"  [order-history] ERROR: {e}")
             self._send_json({"error": str(e)}, 500)
 
     def _send_json(self, data, status=200):
