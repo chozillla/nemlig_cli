@@ -325,18 +325,26 @@ if [ -n "$CUSTOM_DOMAIN" ]; then
     echo ""
     echo "Meal Planner:   https://$CUSTOM_DOMAIN/meal-planner/$MEAL_PLANNER_TOKEN"
     echo ""
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║  IMPORTANT: Update your domain's nameservers!              ║"
-    echo "║                                                            ║"
-    echo "║  Go to your domain registrar and set these nameservers:    ║"
-    echo "╚══════════════════════════════════════════════════════════════╝"
+    # Check if domain currently resolves to the correct IP
+    CURRENT_IP=$(dig +short "$CUSTOM_DOMAIN" 2>/dev/null | head -1)
+    if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "$IP" ]; then
+        echo "╔══════════════════════════════════════════════════════════════╗"
+        echo "║  WARNING: DNS mismatch!                                    ║"
+        echo "║                                                            ║"
+        echo "║  $CUSTOM_DOMAIN currently resolves to $CURRENT_IP"
+        echo "║  but the new container IP is $IP"
+        echo "║                                                            ║"
+        echo "║  Update the A record at your domain registrar NOW,         ║"
+        echo "║  or the site will be unreachable.                          ║"
+        echo "╚══════════════════════════════════════════════════════════════╝"
+    elif [ -z "$CURRENT_IP" ]; then
+        echo "NOTE: $CUSTOM_DOMAIN does not resolve yet."
+        echo "Set the A record at your registrar to: $IP"
+    else
+        echo "DNS OK: $CUSTOM_DOMAIN → $IP"
+    fi
     echo ""
-    echo "$NAMESERVERS" | while read -r ns; do
-        echo "    $ns"
-    done
-    echo ""
-    echo "  DNS propagation can take up to 48 hours (usually 1-2 hours)."
-    echo "  Until then, use: https://$ACI_FQDN"
+    echo "  Until DNS propagates, use: https://$ACI_FQDN"
 else
     echo "URL:    https://$ACI_FQDN"
     echo ""

@@ -217,9 +217,27 @@ echo "Azure FQDN:    https://$ACI_FQDN"
 echo "API Token:     $API_TOKEN"
 echo ""
 if [ -n "$CUSTOM_DOMAIN" ]; then
-    echo "Set these nameservers at your registrar:"
-    echo "$NAMESERVERS" | while read -r ns; do echo "  $ns"; done
-    echo ""
+    # Check if domain currently resolves to the correct IP
+    CURRENT_IP=$(dig +short "$CUSTOM_DOMAIN" 2>/dev/null | head -1)
+    if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "$IP" ]; then
+        echo "╔══════════════════════════════════════════════════════════════╗"
+        echo "║  WARNING: DNS mismatch!                                    ║"
+        echo "║                                                            ║"
+        echo "║  $CUSTOM_DOMAIN currently resolves to $CURRENT_IP"
+        echo "║  but the new container IP is $IP"
+        echo "║                                                            ║"
+        echo "║  Update the A record at your domain registrar NOW,         ║"
+        echo "║  or the site will be unreachable.                          ║"
+        echo "╚══════════════════════════════════════════════════════════════╝"
+        echo ""
+    elif [ -z "$CURRENT_IP" ]; then
+        echo "NOTE: $CUSTOM_DOMAIN does not resolve yet."
+        echo "Set the A record at your registrar to: $IP"
+        echo ""
+    else
+        echo "DNS OK: $CUSTOM_DOMAIN → $IP"
+        echo ""
+    fi
 fi
 echo "Commands:"
 echo "  az container logs -g $RESOURCE_GROUP -n $CONTAINER_GROUP --container-name server"
