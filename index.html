@@ -264,11 +264,6 @@ nav a.nav-cta:hover {
   flex: 1;
 }
 
-.day-emoji {
-  font-size: 1.25rem;
-  flex-shrink: 0;
-}
-
 .week-footer {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   margin-top: 1rem;
@@ -339,18 +334,6 @@ nav a.nav-cta:hover {
 .what-card:hover {
   border-color: var(--sage-light);
   box-shadow: 0 4px 20px rgba(74,103,65,0.08);
-}
-
-.what-card-icon {
-  font-size: 2rem;
-  margin-bottom: 1.25rem;
-  display: block;
-  width: 56px;
-  height: 56px;
-  line-height: 56px;
-  text-align: center;
-  background: var(--cream);
-  border-radius: 14px;
 }
 
 .what-card h3 {
@@ -437,36 +420,6 @@ nav a.nav-cta:hover {
   font-size: 0.9375rem;
 }
 
-/* ── Testimonial / quote ─────────────────── */
-.quote-section {
-  padding: 5rem 2rem;
-  max-width: 680px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.quote-mark {
-  font-size: 3rem;
-  color: var(--sage-light);
-  line-height: 1;
-  margin-bottom: 1rem;
-}
-
-.quote-section blockquote {
-  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
-  font-style: italic;
-  line-height: 1.6;
-  color: var(--text);
-  margin-bottom: 1.5rem;
-}
-
-.quote-attr {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 0.875rem;
-  color: var(--muted);
-  font-style: normal;
-}
-
 /* ── CTA ─────────────────────────────────── */
 .cta {
   background: var(--sage);
@@ -541,7 +494,6 @@ footer a {
   .what-grid { grid-template-columns: 1fr; }
   .how { padding: 4rem 1.25rem; }
   .cta { padding: 4rem 1.25rem; }
-  .quote-section { padding: 4rem 1.25rem; }
   .lang-switch { top: 0.75rem; right: 0.75rem; }
   nav { padding: 1rem 1.25rem; }
 }
@@ -581,27 +533,22 @@ footer a {
     <div class="day-row">
       <span class="day-name" data-da="Man" data-en="Mon"></span>
       <span class="day-meal" data-da="Kylling i karry med jasminris" data-en="Chicken curry with jasmine rice"></span>
-      <span class="day-emoji">🍛</span>
     </div>
     <div class="day-row">
       <span class="day-name" data-da="Tir" data-en="Tue"></span>
       <span class="day-meal" data-da="Pasta med kødsauce og parmesan" data-en="Pasta with meat sauce and parmesan"></span>
-      <span class="day-emoji">🍝</span>
     </div>
     <div class="day-row">
       <span class="day-name" data-da="Ons" data-en="Wed"></span>
       <span class="day-meal" data-da="Laksefrikadeller med remoulade" data-en="Salmon patties with remoulade"></span>
-      <span class="day-emoji">🐟</span>
     </div>
     <div class="day-row">
       <span class="day-name" data-da="Tor" data-en="Thu"></span>
       <span class="day-meal" data-da="Butternut squash-suppe og brød" data-en="Butternut squash soup and bread"></span>
-      <span class="day-emoji">🥣</span>
     </div>
     <div class="day-row">
       <span class="day-name" data-da="Fre" data-en="Fri"></span>
       <span class="day-meal" data-da="Hjemmelavet pizza med mozzarella" data-en="Homemade pizza with mozzarella"></span>
-      <span class="day-emoji">🍕</span>
     </div>
     <div class="week-footer">
       <span data-da="5 dage · 2 personer" data-en="5 days · 2 people"></span>
@@ -618,17 +565,14 @@ footer a {
   <p data-da="Fortæl hvad du har lyst til, og lad AI'en klare resten." data-en="Tell us what you're in the mood for and let the AI handle the rest."></p>
   <div class="what-grid">
     <div class="what-card">
-      <span class="what-card-icon">📋</span>
       <h3 data-da="Personlig madplan" data-en="Personal meal plan"></h3>
       <p data-da="AI'en forstår dine kostvaner, allergier og hvad du har lyst til. Du får en ugeplan der passer lige præcis til din husstand." data-en="The AI understands your dietary habits, allergies, and cravings. You get a weekly plan that fits your exact household."></p>
     </div>
     <div class="what-card">
-      <span class="what-card-icon">🛒</span>
       <h3 data-da="Indkøbsliste med priser" data-en="Shopping list with prices"></h3>
       <p data-da="Alle ingredienser samles i en indkøbsliste med rigtige priser. Du kan fjerne eller tilføje varer, og sende det hele til din kurv." data-en="All ingredients are collected in a shopping list with real prices. Remove or add items and send it all to your basket."></p>
     </div>
     <div class="what-card">
-      <span class="what-card-icon">💰</span>
       <h3 data-da="Inden for dit budget" data-en="Within your budget"></h3>
       <p data-da="Sæt et ugebudget og AI'en planlægger derefter. Du ser den samlede pris før du handler — ingen overraskelser." data-en="Set a weekly budget and the AI plans accordingly. See the total price before you shop — no surprises."></p>
     </div>
@@ -661,13 +605,6 @@ footer a {
       </div>
     </div>
   </div>
-</section>
-
-<!-- Quote -->
-<section class="quote-section">
-  <div class="quote-mark">"</div>
-  <blockquote data-da="Jeg brugte 45 minutter hver søndag på at planlægge ugens mad. Nu tager det to minutter, og vi spiser mere varieret end nogensinde." data-en="I used to spend 45 minutes every Sunday planning the week's meals. Now it takes two minutes, and we eat more varied than ever."></blockquote>
-  <div class="quote-attr" data-da="— tidlig bruger, København" data-en="— early user, Copenhagen"></div>
 </section>
 
 <!-- CTA -->
