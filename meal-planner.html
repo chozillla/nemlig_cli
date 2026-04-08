@@ -677,11 +677,25 @@ const SOCIAL_PROVIDERS = [
   // { id: 'facebook', name: 'Facebook', svg: FACEBOOK_SVG },
 ];
 
+function getAuthMode() {
+  return new URLSearchParams(location.search).get('mode') || 'signup';
+}
+
 function renderAuth() {
+  const isSignin = getAuthMode() === 'signin';
+  const title = isSignin ? 'Velkommen tilbage' : 'Kom i gang med Ugemad';
+  const subtitle = isSignin
+    ? 'Log ind med din email — vi sender et link, ingen adgangskode.'
+    : 'Opret din konto på under et minut — ingen adgangskode.';
+  const btn = isSignin ? 'Log ind' : 'Opret konto';
+  const footer = isSignin
+    ? '<span>Ny bruger? <a href="/meal-planner?mode=signup">Opret konto</a></span>'
+    : '<span>Har du allerede en konto? <a href="/meal-planner?mode=signin">Log ind</a></span>';
+
   $app.innerHTML = `
     <div class="auth-view">
-      <div class="auth-title">Welcome to Ugemad</div>
-      <div class="auth-subtitle">Enter your email to sign in or create an account — no password needed.</div>
+      <div class="auth-title">${title}</div>
+      <div class="auth-subtitle">${subtitle}</div>
       ${SOCIAL_PROVIDERS.length ? `<div class="auth-social">
         ${SOCIAL_PROVIDERS.map(p => `<button class="auth-social-btn" onclick="doSignInWithProvider('${p.id}')">${p.svg} Continue with ${p.name}</button>`).join('')}
       </div>
@@ -689,10 +703,10 @@ function renderAuth() {
       <div id="auth-error" class="auth-error"></div>
       <div class="auth-input">
         <label>Email</label>
-        <input type="email" id="auth-email" placeholder="you@example.com" onkeydown="if(event.key==='Enter'){event.preventDefault();doMagicLink();}">
+        <input type="email" id="auth-email" placeholder="dig@eksempel.dk" onkeydown="if(event.key==='Enter'){event.preventDefault();doMagicLink();}">
       </div>
-      <button id="magic-link-btn" class="btn btn-primary" style="width:100%" onclick="doMagicLink()">Send magic link</button>
-      <div class="auth-link" style="margin-top:0.75rem">We'll email you a link to sign in instantly.</div>
+      <button id="magic-link-btn" class="btn btn-primary" style="width:100%" onclick="doMagicLink()">${btn}</button>
+      <div class="auth-link" style="margin-top:0.75rem">${footer}</div>
     </div>
   `;
   $bar.innerHTML = '';
