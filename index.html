@@ -90,6 +90,23 @@ nav {
   letter-spacing: -0.02em;
 }
 
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.nav-link {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.nav-link:hover { color: var(--text); }
+
 nav a.nav-cta {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 0.875rem;
@@ -510,7 +527,10 @@ footer a {
 <!-- Nav -->
 <nav>
   <a href="/" class="logo">Ugemad</a>
-  <a href="/meal-planner" class="nav-cta" data-da="Lav madplan" data-en="Plan meals"></a>
+  <div class="nav-links">
+    <a href="/meal-planner" class="nav-link" data-da="Log ind" data-en="Sign in"></a>
+    <a href="/meal-planner" class="nav-cta" data-da="Kom i gang" data-en="Get started"></a>
+  </div>
 </nav>
 
 <!-- Hero -->
