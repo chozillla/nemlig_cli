@@ -1,23 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="da">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meal Planner</title>
+<title>Ugemad — Madplanlægger</title>
 <style>
 :root {
-  --green: #2a6496;
-  --green-hover: #1e4f78;
-  --green-bg: #dae8f5;
+  --green: #4a6a8a;
+  --green-hover: #3a5570;
+  --green-bg: #e3edf5;
   --red: #cf222e;
   --red-bg: #ffebe9;
-  --text: #1f2328;
-  --muted: #656d76;
-  --bg: #f6f8fa;
+  --text: #1e2a36;
+  --muted: #5e6d7a;
+  --bg: #f7f9fb;
   --card: #ffffff;
-  --border: #d0d7de;
+  --border: #d4dce4;
   --radius: 16px;
-  --shadow: 0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.06);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -30,12 +30,12 @@ body {
 
 /* ── Header ─────────────────── */
 header { text-align: center; margin-bottom: 2rem; }
-header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
-header .sub { color: var(--muted); font-size: 0.875rem; margin-top: 0.25rem; }
+header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; font-family: 'Georgia', 'Times New Roman', serif; font-style: italic; color: var(--green); }
+header .sub { color: var(--muted); font-size: 0.875rem; margin-top: 0.25rem; display: none; }
 
 /* ── Card ───────────────────── */
 .card {
-  background: var(--card); border-radius: var(--radius);
+  background: var(--card); border-radius: 20px;
   box-shadow: var(--shadow); padding: 2rem;
   position: relative; overflow: hidden;
 }
@@ -110,12 +110,12 @@ textarea { resize: vertical; min-height: 100px; }
 /* ── Buttons ────────────────── */
 .actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
 .btn {
-  flex: 1; padding: 0.75rem 1.5rem; border-radius: 10px;
+  flex: 1; padding: 0.75rem 1.5rem; border-radius: 99px;
   font-size: 1rem; font-weight: 600; cursor: pointer;
-  border: none; transition: all 0.15s; font-family: inherit;
+  border: none; transition: all 0.2s; font-family: inherit;
 }
 .btn-primary { background: var(--green); color: white; }
-.btn-primary:hover { background: var(--green-hover); }
+.btn-primary:hover { background: var(--green-hover); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(74,106,138,0.25); }
 .btn-secondary { background: transparent; color: var(--muted); border: 1.5px solid var(--border); }
 .btn-secondary:hover { color: var(--text); border-color: var(--text); }
 .btn-danger { background: transparent; color: var(--red); border: 1.5px solid var(--border); }
@@ -367,13 +367,13 @@ textarea { resize: vertical; min-height: 100px; }
 
 /* ── Auth Screen ───────────── */
 .auth-view { animation: slideUp 0.3s ease; }
-.auth-title { font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: 0.25rem; }
+.auth-title { font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: 0.25rem; font-family: 'Georgia', 'Times New Roman', serif; }
 .auth-subtitle { color: var(--muted); font-size: 0.875rem; text-align: center; margin-bottom: 1.5rem; }
 .auth-input { margin-bottom: 0.75rem; }
 .auth-input label { display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.25rem; }
 .auth-input input {
   width: 100%; padding: 0.75rem 1rem;
-  border: 1.5px solid var(--border); border-radius: 10px;
+  border: 1.5px solid var(--border); border-radius: 12px;
   font-size: 1rem; font-family: inherit;
   background: var(--bg); color: var(--text);
   transition: border-color 0.15s; outline: none;
@@ -391,10 +391,10 @@ textarea { resize: vertical; min-height: 100px; }
 .auth-social { display: flex; flex-direction: column; gap: 0.5rem; }
 .auth-social-btn {
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-  padding: 0.625rem 1rem; border-radius: 10px;
+  padding: 0.625rem 1rem; border-radius: 99px;
   border: 1.5px solid var(--border); background: var(--card);
   font-size: 0.9375rem; font-weight: 500; cursor: pointer;
-  transition: all 0.15s; font-family: inherit; color: var(--text);
+  transition: all 0.2s; font-family: inherit; color: var(--text);
 }
 .auth-social-btn:hover { border-color: var(--green); background: var(--bg); }
 .auth-social-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
@@ -962,8 +962,7 @@ function onProviderChange() {
 function updateProviderBadge() {
   const cfg = getLLMConfig();
   const el = document.getElementById('provider-display');
-  const names = { azure: 'Azure OpenAI', openai: 'OpenAI', anthropic: 'Anthropic Claude', ollama: 'Ollama (local)', custom: 'Custom' };
-  el.textContent = (names[cfg.provider] || cfg.provider) + (cfg.model ? '  /  ' + cfg.model : '');
+  el.textContent = '';
 }
 
 function toggleLLMPanel() {
@@ -1128,7 +1127,7 @@ function getPipeline() {
   return [
     { id: 'prompt', icon: '1', title: 'Sending your request',
       detail: `${state.people} people \u00b7 ${state.days.length} days \u00b7 ${state.budget} kr${diet ? ' \u00b7 ' + diet : ''}` },
-    { id: 'ai', icon: '2', title: `${(() => { const c = getLLMConfig(); const n = {azure:'Azure OpenAI',openai:'OpenAI',anthropic:'Claude',ollama:'Ollama',custom:'LLM'}; return (n[c.provider]||'AI') + (c.model ? ' ('+c.model+')' : ''); })()} is designing your menu`,
+    { id: 'ai', icon: '2', title: 'AI is designing your menu',
       detail: `Analyzing "${state.meals.substring(0, 50)}${state.meals.length > 50 ? '\u2026' : ''}"` },
     { id: 'login', icon: '3', title: 'Connecting to nemlig.com',
       detail: 'Authenticating & fetching session...' },
