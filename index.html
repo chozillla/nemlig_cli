@@ -5,33 +5,41 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ugemad — Din ugentlige madplan</title>
 <meta name="description" content="AI-powered ugentlig madplanlægning. Spar tid og penge på dine indkøb.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --sage: #4a6a8a;
-  --sage-light: #e3edf5;
-  --sage-dark: #3a5570;
+  --sage: #2563eb;
+  --sage-light: #eff6ff;
+  --sage-dark: #1d4ed8;
+  --sage-glow: rgba(37,99,235,0.15);
+  --accent: #7c3aed;
   --warm: #b07942;
   --warm-light: #faf0e4;
-  --cream: #f7f9fb;
-  --sand: #edf1f5;
-  --text: #1e2a36;
-  --muted: #5e6d7a;
+  --cream: #f8fafc;
+  --sand: #f1f5f9;
+  --text: #0f172a;
+  --muted: #64748b;
   --card: #ffffff;
-  --border: #d4dce4;
+  --border: #e2e8f0;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
-  font-family: 'Georgia', 'Times New Roman', serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   line-height: 1.7;
   overflow-x: hidden;
   background: var(--cream);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ── Utility ─────────────────────────────── */
-.sans { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+.sans { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 
 /* ── Language switcher ───────────────────── */
 .lang-switch {
@@ -87,7 +95,8 @@ nav {
   font-style: italic;
   color: var(--sage);
   text-decoration: none;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  font-family: 'Playfair Display', Georgia, serif;
 }
 
 .nav-links {
@@ -97,31 +106,31 @@ nav {
 }
 
 .nav-link {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--muted);
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color var(--transition);
 }
 
 .nav-link:hover { color: var(--text); }
 
 nav a.nav-cta {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--sage);
+  color: white;
   text-decoration: none;
-  border: 1.5px solid var(--sage);
+  background: var(--sage);
   padding: 0.5rem 1.25rem;
-  border-radius: 99px;
-  transition: all 0.2s;
+  border-radius: 10px;
+  transition: all var(--transition);
+  border: none;
 }
 
 nav a.nav-cta:hover {
-  background: var(--sage);
-  color: white;
+  background: var(--sage-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--sage-glow);
 }
 
 /* ── Hero ────────────────────────────────── */
@@ -143,7 +152,7 @@ nav a.nav-cta:hover {
 }
 
 .hero-label {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   display: inline-block;
   font-size: 0.6875rem;
   font-weight: 600;
@@ -159,10 +168,11 @@ nav a.nav-cta:hover {
 .hero h1 {
   font-size: clamp(2.25rem, 5vw, 3.5rem);
   font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
   margin-bottom: 1.25rem;
   color: var(--text);
+  font-family: 'Playfair Display', Georgia, serif;
 }
 
 .hero h1 em {
@@ -186,7 +196,6 @@ nav a.nav-cta:hover {
 }
 
 .btn-primary {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -195,23 +204,23 @@ nav a.nav-cta:hover {
   font-size: 0.9375rem;
   font-weight: 600;
   padding: 0.875rem 1.75rem;
-  border-radius: 99px;
+  border-radius: 12px;
   text-decoration: none;
-  transition: all 0.2s;
+  transition: all var(--transition);
   border: none;
   cursor: pointer;
 }
 
 .btn-primary:hover {
   background: var(--sage-dark);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(74,106,138,0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--sage-glow);
 }
 
 .btn-primary svg { width: 18px; height: 18px; }
 
 .btn-ghost {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--muted);
@@ -243,7 +252,7 @@ nav a.nav-cta:hover {
 }
 
 .week-header {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -265,7 +274,7 @@ nav a.nav-cta:hover {
 .day-row:last-child { border-bottom: none; }
 
 .day-name {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--sage);
@@ -282,7 +291,7 @@ nav a.nav-cta:hover {
 }
 
 .week-footer {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   margin-top: 1rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
@@ -321,9 +330,10 @@ nav a.nav-cta:hover {
 .what h2 {
   font-size: clamp(1.75rem, 3.5vw, 2.5rem);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   margin-bottom: 0.75rem;
   text-align: center;
+  font-family: 'Playfair Display', Georgia, serif;
 }
 
 .what > p {
@@ -345,19 +355,20 @@ nav a.nav-cta:hover {
   border-radius: 16px;
   padding: 2rem 1.75rem;
   border: 1px solid var(--border);
-  transition: border-color 0.25s, box-shadow 0.25s;
+  transition: all var(--transition);
 }
 
 .what-card:hover {
   border-color: var(--sage-light);
-  box-shadow: 0 4px 20px rgba(74,106,138,0.08);
+  box-shadow: 0 8px 32px rgba(37,99,235,0.06);
+  transform: translateY(-2px);
 }
 
 .what-card h3 {
   font-size: 1.0625rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.01em;
 }
 
 .what-card p {
@@ -380,9 +391,10 @@ nav a.nav-cta:hover {
 .how h2 {
   font-size: clamp(1.75rem, 3.5vw, 2.5rem);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   margin-bottom: 3rem;
   text-align: center;
+  font-family: 'Playfair Display', Georgia, serif;
 }
 
 .how-step {
@@ -395,7 +407,7 @@ nav a.nav-cta:hover {
 .how-step:last-child { margin-bottom: 0; }
 
 .how-num {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -429,7 +441,7 @@ nav a.nav-cta:hover {
   font-weight: 700;
   margin-bottom: 0.25rem;
   padding-top: 0.4rem;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
 }
 
 .how-step-text p {
@@ -439,7 +451,7 @@ nav a.nav-cta:hover {
 
 /* ── CTA ─────────────────────────────────── */
 .cta {
-  background: var(--sage);
+  background: linear-gradient(135deg, var(--sage), var(--accent));
   padding: 5rem 2rem;
   text-align: center;
 }
@@ -448,8 +460,9 @@ nav a.nav-cta:hover {
   font-size: clamp(1.75rem, 4vw, 2.5rem);
   font-weight: 700;
   color: white;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   margin-bottom: 0.75rem;
+  font-family: 'Playfair Display', Georgia, serif;
 }
 
 .cta p {
@@ -462,7 +475,6 @@ nav a.nav-cta:hover {
 }
 
 .btn-light {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -471,14 +483,14 @@ nav a.nav-cta:hover {
   font-size: 0.9375rem;
   font-weight: 600;
   padding: 0.875rem 2rem;
-  border-radius: 99px;
+  border-radius: 12px;
   text-decoration: none;
-  transition: all 0.2s;
+  transition: all var(--transition);
 }
 
 .btn-light:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
 }
 
 .btn-light svg { width: 18px; height: 18px; }
@@ -487,7 +499,7 @@ nav a.nav-cta:hover {
 footer {
   padding: 2rem;
   text-align: center;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   color: var(--muted);
   font-size: 0.8125rem;
   background: var(--cream);

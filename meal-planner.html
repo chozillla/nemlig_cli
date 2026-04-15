@@ -4,40 +4,53 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ugemad — Madplanlægger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --green: #4a6a8a;
-  --green-hover: #3a5570;
-  --green-bg: #e3edf5;
-  --red: #cf222e;
-  --red-bg: #ffebe9;
-  --text: #1e2a36;
-  --muted: #5e6d7a;
-  --bg: #f7f9fb;
+  --green: #2563eb;
+  --green-hover: #1d4ed8;
+  --green-bg: #eff6ff;
+  --green-glow: rgba(37,99,235,0.15);
+  --accent: #7c3aed;
+  --accent-bg: #f5f3ff;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+  --text: #0f172a;
+  --muted: #64748b;
+  --bg: #f8fafc;
   --card: #ffffff;
-  --border: #d4dce4;
+  --border: #e2e8f0;
+  --border-hover: #cbd5e1;
   --radius: 16px;
-  --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.04), 0 20px 40px rgba(0,0,0,0.08);
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg); color: var(--text);
   min-height: 100dvh; display: flex; justify-content: center;
   padding: 2rem 1rem; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-.container { max-width: 480px; width: 100%; }
+.container { max-width: 520px; width: 100%; }
 
 /* ── Header ─────────────────── */
 header { text-align: center; margin-bottom: 2rem; }
-header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; font-family: 'Georgia', 'Times New Roman', serif; font-style: italic; color: var(--green); }
-header .sub { color: var(--muted); font-size: 0.875rem; margin-top: 0.25rem; display: none; }
+header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.03em; font-family: 'Playfair Display', Georgia, serif; font-style: italic; color: var(--green); }
+header .sub { color: var(--muted); font-size: 0.8125rem; margin-top: 0.25rem; display: none; font-weight: 400; }
 
 /* ── Card ───────────────────── */
 .card {
   background: var(--card); border-radius: 20px;
   box-shadow: var(--shadow); padding: 2rem;
   position: relative; overflow: hidden;
+  border: 1px solid var(--border);
 }
 
 /* ── Animations ─────────────── */
@@ -47,17 +60,18 @@ header .sub { color: var(--muted); font-size: 0.875rem; margin-top: 0.25rem; dis
 @keyframes stagger { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ── Form elements ──────────── */
-.question { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.25rem; }
-.hint { color: var(--muted); font-size: 0.8125rem; margin-bottom: 1rem; }
+.question { font-size: 1.125rem; font-weight: 700; margin-bottom: 0.25rem; letter-spacing: -0.01em; }
+.hint { color: var(--muted); font-size: 0.8125rem; margin-bottom: 1rem; font-weight: 400; }
 
 textarea, input[type="text"], input[type="number"] {
   width: 100%; padding: 0.75rem 1rem;
-  border: 1.5px solid var(--border); border-radius: 10px;
-  font-size: 1rem; font-family: inherit;
-  background: var(--bg); color: var(--text);
-  transition: border-color 0.15s; outline: none;
+  border: 1.5px solid var(--border); border-radius: 12px;
+  font-size: 0.9375rem; font-family: inherit;
+  background: var(--card); color: var(--text);
+  transition: all var(--transition); outline: none;
+  box-shadow: var(--shadow-sm);
 }
-textarea:focus, input:focus { border-color: var(--green); }
+textarea:focus, input:focus { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-glow); }
 textarea { resize: vertical; min-height: 100px; }
 
 /* ── Stepper ────────────────── */
@@ -67,32 +81,37 @@ textarea { resize: vertical; min-height: 100px; }
   border: 1.5px solid var(--border); background: var(--card);
   font-size: 1.5rem; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s; color: var(--text);
+  transition: all var(--transition); color: var(--text);
+  box-shadow: var(--shadow-sm);
 }
-.stepper button:hover { border-color: var(--green); color: var(--green); }
-.stepper .value { font-size: 3rem; font-weight: 700; min-width: 3ch; text-align: center; }
+.stepper button:hover { border-color: var(--green); color: var(--green); background: var(--green-bg); transform: scale(1.05); }
+.stepper button:active { transform: scale(0.95); }
+.stepper .value { font-size: 3rem; font-weight: 800; min-width: 3ch; text-align: center; letter-spacing: -0.02em; }
 
 /* ── Day pills ──────────────── */
 .pills { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
 .pill {
-  padding: 0.5rem 1rem; border-radius: 99px;
+  padding: 0.5rem 1.125rem; border-radius: 99px;
   border: 1.5px solid var(--border); background: var(--card);
-  cursor: pointer; font-size: 0.9375rem; font-weight: 500;
-  transition: all 0.15s; user-select: none;
+  cursor: pointer; font-size: 0.875rem; font-weight: 600;
+  transition: all var(--transition); user-select: none;
+  box-shadow: var(--shadow-sm);
 }
-.pill:hover { border-color: var(--green); }
-.pill.selected { background: var(--green); color: white; border-color: var(--green); }
+.pill:hover { border-color: var(--green); background: var(--green-bg); transform: translateY(-1px); }
+.pill:active { transform: scale(0.96); }
+.pill.selected { background: var(--green); color: white; border-color: var(--green); box-shadow: 0 2px 8px var(--green-glow); }
 
 /* ── Diet chips ─────────────── */
 .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
 .chip {
-  padding: 0.375rem 0.875rem; border-radius: 99px;
+  padding: 0.4rem 0.875rem; border-radius: 99px;
   border: 1.5px solid var(--border); background: var(--card);
   cursor: pointer; font-size: 0.8125rem; font-weight: 500;
-  transition: all 0.15s; user-select: none;
+  transition: all var(--transition); user-select: none;
 }
-.chip:hover { border-color: var(--green); }
-.chip.selected { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.chip:hover { border-color: var(--green); background: var(--green-bg); transform: translateY(-1px); }
+.chip:active { transform: scale(0.96); }
+.chip.selected { background: var(--green-bg); color: var(--green); border-color: var(--green); font-weight: 600; }
 
 /* ── Budget ─────────────────── */
 .budget-input {
@@ -110,18 +129,20 @@ textarea { resize: vertical; min-height: 100px; }
 /* ── Buttons ────────────────── */
 .actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
 .btn {
-  flex: 1; padding: 0.75rem 1.5rem; border-radius: 99px;
-  font-size: 1rem; font-weight: 600; cursor: pointer;
-  border: none; transition: all 0.2s; font-family: inherit;
+  flex: 1; padding: 0.75rem 1.5rem; border-radius: 12px;
+  font-size: 0.9375rem; font-weight: 600; cursor: pointer;
+  border: none; transition: all var(--transition); font-family: inherit;
+  letter-spacing: -0.01em;
 }
-.btn-primary { background: var(--green); color: white; }
-.btn-primary:hover { background: var(--green-hover); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(74,106,138,0.25); }
-.btn-secondary { background: transparent; color: var(--muted); border: 1.5px solid var(--border); }
-.btn-secondary:hover { color: var(--text); border-color: var(--text); }
+.btn-primary { background: var(--green); color: white; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.btn-primary:hover { background: var(--green-hover); transform: translateY(-1px); box-shadow: 0 4px 12px var(--green-glow); }
+.btn-primary:active { transform: translateY(0); }
+.btn-secondary { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+.btn-secondary:hover { background: var(--card); border-color: var(--border-hover); box-shadow: var(--shadow-sm); }
 .btn-danger { background: transparent; color: var(--red); border: 1.5px solid var(--border); }
 .btn-danger:hover { background: var(--red-bg); border-color: var(--red); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-text { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.875rem; padding: 0.5rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+.btn-text { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.875rem; padding: 0.5rem; font-weight: 500; }
 .btn-text:hover { color: var(--text); }
 
 /* ── Progress bar ──────────── */
@@ -129,10 +150,10 @@ textarea { resize: vertical; min-height: 100px; }
   display: flex; gap: 0.375rem; justify-content: center; margin-top: 1.5rem;
 }
 .prog-seg {
-  height: 4px; border-radius: 2px; flex: 1;
-  background: var(--border); transition: background 0.3s;
+  height: 3px; border-radius: 2px; flex: 1;
+  background: var(--border); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.prog-seg.active { background: var(--green); }
+.prog-seg.active { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
 .prog-seg.done { background: var(--green); }
 
 /* ── Review summary ─────────── */
@@ -168,8 +189,8 @@ textarea { resize: vertical; min-height: 100px; }
   border-color: var(--green); background: var(--green); color: white;
 }
 @keyframes pulse-ring {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(42,100,150,0.3); }
-  50% { box-shadow: 0 0 0 6px rgba(42,100,150,0); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--green-glow); }
+  50% { box-shadow: 0 0 0 8px transparent; }
 }
 .pipe-body { flex: 1; min-width: 0; }
 .pipe-title { font-size: 0.8125rem; font-weight: 600; color: var(--text); }
@@ -190,14 +211,15 @@ textarea { resize: vertical; min-height: 100px; }
 /* ── Results ────────────────── */
 .results { animation: fadeIn 0.4s ease; }
 .summary-card {
-  background: var(--green-bg); border-radius: 12px;
-  padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+  background: linear-gradient(135deg, var(--green-bg), var(--accent-bg)); border-radius: 16px;
+  padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
   display: flex; justify-content: space-around; text-align: center;
   animation: stagger 0.5s ease;
+  border: 1px solid var(--border);
 }
 .summary-stat { }
-.summary-num { font-size: 1.5rem; font-weight: 700; color: var(--green); line-height: 1.2; }
-.summary-label { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.summary-num { font-size: 1.5rem; font-weight: 800; color: var(--green); line-height: 1.2; letter-spacing: -0.02em; }
+.summary-label { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
 
 .section-title {
   font-size: 0.6875rem; font-weight: 600; margin: 1.5rem 0 0.75rem;
@@ -321,11 +343,12 @@ textarea { resize: vertical; min-height: 100px; }
 /* ── Basket viewer ──────────── */
 .basket-bar {
   display: flex; align-items: center; justify-content: space-between;
-  background: var(--card); border-radius: 10px; box-shadow: var(--shadow);
-  padding: 0.625rem 1rem; margin-bottom: 0.75rem; cursor: pointer;
-  transition: all 0.15s; font-size: 0.8125rem;
+  background: var(--card); border-radius: 12px; box-shadow: var(--shadow);
+  padding: 0.75rem 1.125rem; margin-bottom: 0.75rem; cursor: pointer;
+  transition: all var(--transition); font-size: 0.8125rem;
+  border: 1px solid var(--border);
 }
-.basket-bar:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.basket-bar:hover { box-shadow: var(--shadow-lg); border-color: var(--border-hover); transform: translateY(-1px); }
 .basket-count {
   background: var(--green); color: white; font-size: 0.6875rem; font-weight: 700;
   padding: 0.125rem 0.5rem; border-radius: 99px; margin-left: 0.5rem;
@@ -350,6 +373,49 @@ textarea { resize: vertical; min-height: 100px; }
 .basket-item .price { font-weight: 500; font-variant-numeric: tabular-nums; }
 .basket-actions { display: flex; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
 
+/* ── Desktop responsive ────── */
+@media (min-width: 768px) {
+  body { padding: 2.5rem 2rem; }
+  .container { max-width: 680px; }
+  .card { padding: 2.5rem 3rem; border-radius: 24px; }
+  header h1 { font-size: 2.25rem; }
+  .question { font-size: 1.25rem; }
+  .hint { font-size: 0.875rem; }
+  textarea { min-height: 120px; }
+  .review-grid { grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+  .review-full { grid-column: 1 / -1; }
+  .summary-card { padding: 1.5rem 2rem; gap: 2rem; }
+  .summary-num { font-size: 1.75rem; }
+  .receipt-line { font-size: 0.875rem; padding: 0.5rem 0; }
+  .day-card { margin-bottom: 1.25rem; }
+  .day-name { font-size: 1rem; }
+  .meal-item { font-size: 0.875rem; }
+  .nav-tab { padding: 0.625rem 1.5rem; font-size: 0.875rem; }
+  .user-bar { padding: 0.625rem 0; }
+  .user-name { font-size: 0.9375rem; }
+  .basket-bar { padding: 0.75rem 1.25rem; font-size: 0.875rem; }
+  .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.5rem; }
+  .profile-grid .profile-full { grid-column: 1 / -1; }
+  .auth-view { max-width: 400px; margin: 0 auto; }
+  .pipeline { padding: 1rem 0; }
+  .pipe-title { font-size: 0.875rem; }
+  .btn { padding: 0.875rem 2rem; }
+  .actions { margin-top: 2rem; }
+}
+
+@media (min-width: 1024px) {
+  .container { max-width: 860px; }
+  .card { padding: 3rem 3.5rem; }
+  header h1 { font-size: 2.5rem; }
+  .review-grid { grid-template-columns: repeat(4, 1fr); }
+  .results-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+  .results-layout .results-full { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1280px) {
+  .container { max-width: 960px; }
+}
+
 /* ── Print / PDF ────────────── */
 @media print {
   body { background: white; padding: 0; }
@@ -367,18 +433,19 @@ textarea { resize: vertical; min-height: 100px; }
 
 /* ── Auth Screen ───────────── */
 .auth-view { animation: slideUp 0.3s ease; }
-.auth-title { font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: 0.25rem; font-family: 'Georgia', 'Times New Roman', serif; }
+.auth-title { font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: 0.25rem; font-family: 'Playfair Display', Georgia, serif; letter-spacing: -0.02em; }
 .auth-subtitle { color: var(--muted); font-size: 0.875rem; text-align: center; margin-bottom: 1.5rem; }
 .auth-input { margin-bottom: 0.75rem; }
 .auth-input label { display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.25rem; }
 .auth-input input {
   width: 100%; padding: 0.75rem 1rem;
   border: 1.5px solid var(--border); border-radius: 12px;
-  font-size: 1rem; font-family: inherit;
-  background: var(--bg); color: var(--text);
-  transition: border-color 0.15s; outline: none;
+  font-size: 0.9375rem; font-family: inherit;
+  background: var(--card); color: var(--text);
+  transition: all var(--transition); outline: none;
+  box-shadow: var(--shadow-sm);
 }
-.auth-input input:focus { border-color: var(--green); }
+.auth-input input:focus { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-glow); }
 .auth-error { color: var(--red); font-size: 0.8125rem; margin-bottom: 0.75rem; display: none; }
 .auth-error.show { display: block; }
 .auth-divider {
@@ -409,30 +476,31 @@ textarea { resize: vertical; min-height: 100px; }
 
 /* ── User Bar ──────────────── */
 .user-bar {
-  display: flex; align-items: center; gap: 0.5rem;
+  display: flex; align-items: center; gap: 0.625rem;
   padding: 0.5rem 0; margin-bottom: 0.5rem;
 }
 .user-avatar {
-  width: 28px; height: 28px; border-radius: 50%;
-  background: var(--green); color: white;
+  width: 32px; height: 32px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--green), var(--accent)); color: white;
   display: flex; align-items: center; justify-content: center;
   font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
 }
-.user-name { flex: 1; font-size: 0.875rem; font-weight: 500; }
+.user-name { flex: 1; font-size: 0.875rem; font-weight: 600; }
 .user-bar .btn-text { font-size: 0.75rem; color: var(--muted); }
 
 /* ── Nav Tabs ──────────────── */
 .nav-tabs {
-  display: none; gap: 0; margin-bottom: 1rem;
-  border-bottom: 1.5px solid var(--border);
+  display: none; gap: 0.25rem; margin-bottom: 1rem;
+  background: var(--bg); border-radius: 12px; padding: 0.25rem;
+  border: 1px solid var(--border);
 }
 .nav-tab {
-  padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500;
-  color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
-  transition: all 0.15s; margin-bottom: -1.5px;
+  padding: 0.5rem 1rem; font-size: 0.8125rem; font-weight: 500;
+  color: var(--muted); cursor: pointer; border-radius: 10px;
+  transition: all var(--transition); text-align: center; flex: 1;
 }
-.nav-tab:hover { color: var(--text); }
-.nav-tab.active { color: var(--green); border-bottom-color: var(--green); }
+.nav-tab:hover { color: var(--text); background: rgba(0,0,0,0.02); }
+.nav-tab.active { color: var(--green); background: var(--card); box-shadow: var(--shadow-sm); font-weight: 600; }
 
 /* ── Profile View ──────────── */
 .profile-view { animation: slideUp 0.3s ease; }
@@ -502,6 +570,9 @@ textarea { resize: vertical; min-height: 100px; }
 </div>
 
 <script>
+window.onerror = function(msg, src, line, col, err) {
+  document.getElementById('app').innerHTML = '<div style="color:red;padding:2rem;font-family:monospace"><b>JS Error:</b><br>' + msg + '<br>Line ' + line + ', Col ' + col + '</div>';
+};
 // ── Configuration ──────────────────────────────────────────
 const DEFAULT_N8N = location.origin;
 
@@ -718,45 +789,49 @@ function renderProfileSetup() {
     <div class="profile-view">
       <div class="question">Set up your profile</div>
       <div class="hint">These preferences will be pre-loaded every time you plan.</div>
-      <div class="profile-field">
-        <label>Display Name</label>
-        <input type="text" id="prof-name" value="${esc(name)}" placeholder="Your name">
-      </div>
-      <div class="profile-field">
-        <label>Household Size</label>
-        <div class="stepper">
-          <button onclick="adjProf(-1)">&#8722;</button>
-          <div class="value" id="prof-people">${userProfile?.household_size || state.people}</div>
-          <button onclick="adjProf(+1)">&#43;</button>
+      <div class="profile-grid">
+        <div class="profile-field">
+          <label>Display Name</label>
+          <input type="text" id="prof-name" value="${esc(name)}" placeholder="Your name">
         </div>
-      </div>
-      <div class="profile-field">
-        <label>Dietary Preferences</label>
-        <div class="chips">
-          ${DIETS.map(d => `<div class="chip ${(userProfile?.dietary_preferences || state.diets).includes(d)?'selected':''}" onclick="toggleProfDiet(this,'${d}')">${d}</div>`).join('')}
+        <div class="profile-field">
+          <label>Household Size</label>
+          <div class="stepper">
+            <button onclick="adjProf(-1)">&#8722;</button>
+            <div class="value" id="prof-people">${userProfile?.household_size || state.people}</div>
+            <button onclick="adjProf(+1)">&#43;</button>
+          </div>
         </div>
-      </div>
-      <div class="profile-field">
-        <label>Weekly Budget (DKK)</label>
-        <div class="budget-input">
-          <input type="number" id="prof-budget" value="${userProfile?.weekly_budget || state.budget}" min="100" max="5000" step="50">
-          <span>kr</span>
+        <div class="profile-field profile-full">
+          <label>Dietary Preferences</label>
+          <div class="chips">
+            ${DIETS.map(d => `<div class="chip ${(userProfile?.dietary_preferences || state.diets).includes(d)?'selected':''}" onclick="toggleProfDiet(this,'${d}')">${d}</div>`).join('')}
+          </div>
         </div>
-      </div>
-      <div class="profile-field">
-        <label>Favorite Meals / Ideas</label>
-        <textarea id="prof-meals" placeholder="e.g. pasta, stir fry, soups...">${esc(userProfile?.favorite_meals || state.meals)}</textarea>
+        <div class="profile-field">
+          <label>Weekly Budget (DKK)</label>
+          <div class="budget-input">
+            <input type="number" id="prof-budget" value="${userProfile?.weekly_budget || state.budget}" min="100" max="5000" step="50">
+            <span>kr</span>
+          </div>
+        </div>
+        <div class="profile-field profile-full">
+          <label>Favorite Meals / Ideas</label>
+          <textarea id="prof-meals" placeholder="e.g. pasta, stir fry, soups...">${esc(userProfile?.favorite_meals || state.meals)}</textarea>
+        </div>
       </div>
       <div class="profile-field" style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border)">
         <label style="font-size:1rem;font-weight:700">Connect nemlig.com account</label>
         <div class="hint" style="margin-bottom:0.75rem">Link your account to add items directly to your nemlig.com basket.</div>
-        <div class="auth-input">
-          <label>nemlig.com Email</label>
-          <input type="email" id="prof-nemlig-email" value="${esc(userProfile?.nemlig_email || '')}" placeholder="your@email.com">
-        </div>
-        <div class="auth-input">
-          <label>nemlig.com Password</label>
-          <input type="password" id="prof-nemlig-pass" value="${userProfile?.nemlig_pass ? '••••••••' : ''}" placeholder="Your nemlig.com password">
+        <div class="profile-grid">
+          <div class="auth-input">
+            <label>nemlig.com Email</label>
+            <input type="email" id="prof-nemlig-email" value="${esc(userProfile?.nemlig_email || '')}" placeholder="your@email.com">
+          </div>
+          <div class="auth-input">
+            <label>nemlig.com Password</label>
+            <input type="password" id="prof-nemlig-pass" value="${userProfile?.nemlig_pass ? '••••••••' : ''}" placeholder="Your nemlig.com password">
+          </div>
         </div>
         ${userProfile?.nemlig_email ? '<div style="font-size:0.8125rem;color:var(--green);margin-top:0.25rem">Connected as ' + esc(userProfile.nemlig_email) + '</div>' : ''}
       </div>
@@ -1252,7 +1327,11 @@ function renderResults() {
     <div class="summary-stat"><div class="summary-num ${state.remaining >= 0 ? 'remaining-positive' : 'remaining-negative'}">${state.remaining >= 0 ? '+' : ''}${state.remaining.toFixed(0)}</div><div class="summary-label">kr left</div></div>
   </div>`;
 
-  // Meal plan
+  // Two-column layout wrapper for desktop
+  html += `<div class="results-layout">`;
+
+  // Meal plan (left column on desktop)
+  html += `<div>`;
   html += `<div class="section-title">Meal Plan</div>`;
   let mealIdx = 0;
   for (let di = 0; di < state.mealPlan.length; di++) {
@@ -1278,8 +1357,10 @@ function renderResults() {
     }
     html += `</div>`;
   }
+  html += `</div>`;
 
-  // Shopping list
+  // Shopping list (right column on desktop)
+  html += `<div>`;
   html += `<div class="section-title">Shopping List</div>`;
   for (let si = 0; si < state.matched.length; si++) {
     const item = state.matched[si];
@@ -1302,6 +1383,8 @@ function renderResults() {
     for (const nf of state.notFound) html += `<div class="warning-item">${esc(nf.displayName)}</div>`;
     html += `</div>`;
   }
+  html += `</div>`; // close shopping list column
+  html += `</div>`; // close results-layout
 
   // Refine section
   html += `<div class="refine-section no-print">`;
@@ -1408,24 +1491,41 @@ function reset() {
   render();
 }
 
-// ── Dev mode (localhost only) ────────────────────────────────
+// ── Dev mode ────────────────────────────────────────────────
 const IS_LOCAL = ['localhost','127.0.0.1'].includes(location.hostname);
+const DEV_KEY = 'ugemad2026';
+const urlDev = new URLSearchParams(location.search).get('dev');
+let devModeActive = false;
+
+function activateDevMode() {
+  devModeActive = true;
+  currentUser = { id: 'dev-user', email: 'dev@ugemad.dk', user_metadata: { full_name: 'Chemay (Dev)' } };
+  state.phase = 'form';
+  state.step = 0;
+  state.meals = 'Meals that are made from organic ingredients, ideally in season in Denmark, and compatible with a low histamine diet. I need to loose weight, while my partner often needs to carb load for his workouts, so each meal should accomodate this. I dont want to cook every day, so suggest meals that can atleast cover dinner for two days or makes multiple portions that can be frozen as meal prep.';
+  state.people = 2;
+  state.days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  state.diets = ['Low histamine'];
+  state.budget = 800;
+  state.notes = '';
+  document.getElementById('basket-bar').style.display = '';
+  renderUserBar();
+  render();
+}
+
+// Auto-activate dev mode via URL: ?dev=ugemad2026
+if (urlDev === DEV_KEY) {
+  activateDevMode();
+}
+
+// Show dev toggle on localhost
 if (IS_LOCAL) {
   document.getElementById('dev-toggle').innerHTML = ' &middot; <label style="cursor:pointer;user-select:none"><input type="checkbox" id="dev-mode" onchange="toggleDevMode()" style="vertical-align:middle"> Dev</label>';
 }
 function toggleDevMode() {
   const on = document.getElementById('dev-mode').checked;
   if (on) {
-    // Skip auth in dev mode
-    currentUser = { id: 'dev-user', email: 'dev@localhost', user_metadata: { full_name: 'Dev User' } };
-    state.phase = 'form';
-    state.meals = 'Meals that are made from organic ingredients, ideally in season in Denmark, and compatible with a low histamine diet. I need to loose weight, while my partner often needs to carb load for his workouts, so each meal should accomodate this. I dont want to cook every day, so suggest meals that can atleast cover dinner for two days or makes multiple portions that can be frozen as meal prep.';
-    state.people = 2;
-    state.days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    state.diets = ['Low histamine'];
-    state.budget = 800;
-    state.notes = '';
-    document.getElementById('basket-bar').style.display = '';
+    activateDevMode();
   } else {
     currentUser = null;
     state.phase = 'auth';
@@ -1434,9 +1534,9 @@ function toggleDevMode() {
     state.budget = 500;
     state.notes = '';
     document.getElementById('basket-bar').style.display = 'none';
+    renderUserBar();
+    render();
   }
-  renderUserBar();
-  render();
 }
 
 // ── Refine & edit ──────────────────────────────────────────
@@ -1694,10 +1794,12 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s || 
 
 // ── Auth Bootstrap ─────────────────────────────────────────
 (async function authBootstrap() {
+  if (devModeActive) { render(); return; }
   if (!sb) { render(); return; }
 
   // Listen for auth state changes (handles OAuth redirects + session restore)
   sb.auth.onAuthStateChange(async (event, session) => {
+    if (devModeActive) return;
     if (session?.user) {
       currentUser = session.user;
       await loadProfile(currentUser.id);
