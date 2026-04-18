@@ -1,16 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="da">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<style data-omelette-injected>html,body{background:transparent}</style><script data-omelette-injected>(()=>{var W=["https://claude.ai","https://preview.claude.ai","https://eap-omelette.claude.ai"];var Y=30000;document.addEventListener("DOMContentLoaded",()=>{const D="transform-react-jsx-source";document.querySelectorAll('script[type="text/babel"],script[type="text/jsx"]').forEach((C,F)=>{const Q=C.getAttribute("data-plugins")||"";if(Q.indexOf(D)<0){C.setAttribute("data-plugins",Q?`${Q},${D}`:D)}if(!C.hasAttribute("data-filename")){C.setAttribute("data-filename",C.getAttribute("src")||`inline-${F}`)}})});var K=window.parent;if(K&&K!==window){const D=(k,f)=>{try{K.postMessage({__omelette_log:true,type:k,data:f},"*")}catch{}};["log","warn","error"].forEach((k)=>{const f=console[k];console[k]=(...w)=>{const z=w.map((h)=>{try{return typeof h==="object"?JSON.stringify(h):String(h)}catch{try{return String(h)}catch{return"[unstringifiable]"}}}).join(" ");D(k,z);f.apply(console,w)}});window.addEventListener("error",(k)=>{const f=k.target;if(f&&f!==window&&f.tagName){const w=f.src||f.href||"";D("resource_error",`${f.tagName} failed to load: ${w}`)}else{D("error",`${k.message||"Unknown error"} at ${k.filename||"?"}:${k.lineno||0}:${k.colno||0}`)}},true);window.addEventListener("unhandledrejection",(k)=>{const f=k.reason;const w=f instanceof Error?`${f.message} ${f.stack}`:String(f);D("error",`Unhandled rejection: ${w}`)});const C=()=>{try{K.postMessage({type:"omelette:height",height:document.documentElement.scrollHeight},"*")}catch{}};if(document.readyState==="complete")C();else window.addEventListener("load",C);if(window.ResizeObserver)new ResizeObserver(C).observe(document.documentElement);const F={};let Q=0;window.claude={complete(k){return new Promise((f,w)=>{if(!W.length){w(new Error("claude.complete: no parent origin"));return}const z=`c${++Q}`;const h=()=>setTimeout(()=>{delete F[z];w(new Error(`claude.complete: no data for ${Y/1000}s`))},Y);const J=h();F[z]={resolve:f,reject:w,text:"",t:J,arm:h};try{for(const V of W){K.postMessage({__om_api:true,id:z,body:k},V)}}catch(V){clearTimeout(J);delete F[z];w(V)}})}};const X=(k)=>{try{return JSON.stringify(k)}catch{return JSON.stringify(String(k))}};window.addEventListener("message",(k)=>{if(W.indexOf(k.origin)<0)return;if(k.source!==K)return;const f=k.data;if(!f)return;if(f.__om_api_r){const h=F[f.id];if(!h)return;if(f.error!=null){clearTimeout(h.t);delete F[f.id];h.reject(new Error(f.error));return}if(f.chunk!=null){clearTimeout(h.t);h.t=h.arm();h.text+=f.chunk;return}if(f.done){clearTimeout(h.t);delete F[f.id];h.resolve(f.text!=null?f.text:h.text);return}return}if(!f.__om_eval)return;const w=f;const z=(h)=>{k.source.postMessage({...h,__om_eval_r:1,id:w.id},k.origin)};try{const h=(0,eval)(w.code);if(h&&typeof h.then==="function"){h.then((J)=>z({ok:1,v:X(J)}),(J)=>z({ok:0,e:String(J)}))}else{z({ok:1,v:X(h)})}}catch(h){z({ok:0,e:String(h)})}})}})();
+</script>
+
+<meta charset="utf-8" />
 <title>Ugemad — Din ugentlige madplan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="description" content="AI-powered ugentlig madplanlægning. Spar tid og penge på dine indkøb.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
   --ink: #0a0a0a;
   --ink-soft: #171717;
@@ -24,881 +25,1116 @@
   --border: #e7e5e4;
   --border-light: #f5f5f4;
   --border-strong: #d6d3d1;
+
   --blue: #2563eb;
-  --blue-soft: #eff6ff;
+  --blue-deep: #1d4ed8;
+  --blue-light: #eff6ff;
   --blue-glow: rgba(37,99,235,0.12);
-  --accent: #2563eb;
-  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-display: 'Instrument Serif', Georgia, serif;
-  --transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  --warm: #b07942;
+  --warm-light: #fdf6ec;
+  --green: #16a34a;
+  --green-bg: #f0fdf4;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+
+  --shadow-sm: 0 1px 2px rgba(10,10,10,0.04);
+  --shadow: 0 1px 2px rgba(10,10,10,0.04), 0 2px 8px rgba(10,10,10,0.04);
+  --shadow-lg: 0 1px 2px rgba(10,10,10,0.04), 0 12px 32px -8px rgba(10,10,10,0.08);
+  --shadow-card: 0 0 0 1px rgba(10,10,10,0.03), 0 1px 2px rgba(10,10,10,0.04), 0 8px 24px -6px rgba(10,10,10,0.06);
+
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --transition: 180ms cubic-bezier(0.32, 0.72, 0, 1);
+
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-display: 'Instrument Serif', 'Times New Roman', serif;
 }
-
-html { scroll-behavior: smooth; }
-
+body.dark {
+  --ink: #fafafa;
+  --ink-soft: #e5e5e5;
+  --text: #fafafa;
+  --text-secondary: #d4d4d4;
+  --muted: #a3a3a3;
+  --muted-soft: #737373;
+  --bg: #0a0a0a;
+  --bg-tint: #171717;
+  --card: #0f0f0f;
+  --border: #262626;
+  --border-light: #1a1a1a;
+  --border-strong: #404040;
+  --blue-light: #0f1e3d;
+  --blue-glow: rgba(92,139,255,0.18);
+  --blue: #5c8bff;
+  --green-bg: #0a1f12;
+  --shadow-card: 0 0 0 1px rgba(255,255,255,0.04), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -6px rgba(0,0,0,0.5);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-feature-settings: "ss01", "cv11"; }
 body {
   font-family: var(--font-sans);
-  color: var(--text);
-  line-height: 1.6;
-  overflow-x: hidden;
-  background: var(--bg);
+  background: var(--bg); color: var(--text);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: 'ss01', 'cv11';
-}
-
-/* Subtle grid background */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
+  font-variant-numeric: tabular-nums;
   background-image:
-    linear-gradient(to right, rgba(10,10,10,0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(10,10,10,0.025) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 20%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 20%, transparent 80%);
-  pointer-events: none;
-  z-index: 0;
+    radial-gradient(1200px 600px at 50% -200px, rgba(37,99,235,0.05), transparent 60%),
+    radial-gradient(800px 400px at 90% 10%, rgba(176,121,66,0.03), transparent 60%);
+  transition: background .3s, color .3s;
+}
+body.dark {
+  background-image:
+    radial-gradient(1200px 600px at 50% -200px, rgba(92,139,255,0.08), transparent 60%),
+    radial-gradient(800px 400px at 90% 10%, rgba(176,121,66,0.05), transparent 60%);
+}
+a { color: inherit; text-decoration: none; }
+
+.container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+.mono { font-family: var(--font-mono); font-size: 0.75rem; }
+.kicker {
+  font-family: var(--font-mono); font-size: 0.6875rem;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--muted); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 0.5rem;
+}
+.kicker::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--blue); box-shadow: 0 0 0 4px var(--blue-glow);
 }
 
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+h1, h2, h3, h4 { font-family: var(--font-sans); letter-spacing: -0.035em; font-weight: 500; }
+.display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.015em; font-style: italic; }
+h1 { font-size: clamp(2.75rem, 5.5vw, 4.25rem); line-height: 1.02; letter-spacing: -0.04em; }
+h2 { font-size: clamp(2rem, 3.5vw, 3rem); line-height: 1.05; letter-spacing: -0.035em; }
+h3 { font-size: 1.125rem; line-height: 1.35; letter-spacing: -0.015em; }
+p { color: var(--text-secondary); line-height: 1.55; }
+.body-lg { font-size: 1.0625rem; color: var(--text-secondary); line-height: 1.55; }
+.muted { color: var(--muted); }
 
-/* ── Language switcher ───────────────────── */
-.lang-switch {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  z-index: 100;
-  display: flex;
-  background: rgba(255,255,255,0.8);
-  backdrop-filter: blur(14px) saturate(180%);
-  -webkit-backdrop-filter: blur(14px) saturate(180%);
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  padding: 3px;
-  box-shadow: 0 1px 2px rgba(10,10,10,0.04);
+/* ── Nav ─────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--border-light);
+}
+.nav-inner {
+  max-width: 1180px; margin: 0 auto; padding: 0.875rem 24px;
+  display: flex; align-items: center; gap: 1.5rem;
+}
+.logo { display: inline-flex; align-items: baseline; gap: 0.375rem; font-size: 1rem; font-weight: 500; letter-spacing: -0.025em; color: var(--ink); }
+.logo::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--blue); box-shadow: 0 0 0 4px var(--blue-glow);
+  display: inline-block;
+  transform: translateY(-1px);
+}
+.nav-links { display: flex; gap: 1.5rem; font-size: 0.8125rem; color: var(--muted); margin-left: 0.5rem; }
+.nav-links a:hover { color: var(--ink); }
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+
+.seg {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--card); padding: 2px; gap: 2px;
+}
+.seg button {
+  border: 0; background: transparent; color: var(--muted);
+  font: 500 0.6875rem/1 var(--font-mono); padding: 0.375rem 0.625rem; border-radius: 999px;
+  cursor: pointer; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.seg button.active { background: var(--ink); color: var(--card); }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font: 500 0.875rem/1 var(--font-sans);
+  padding: 0.625rem 1rem; border-radius: 999px;
+  border: 1px solid transparent; cursor: pointer;
+  transition: all var(--transition); letter-spacing: -0.005em;
+  text-decoration: none;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--ink); color: var(--card); border-color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(10,10,10,0.1);
+}
+.btn-primary:hover { background: var(--ink-soft); transform: translateY(-0.5px); }
+.btn-ghost { background: transparent; color: var(--ink); border-color: var(--border); }
+.btn-ghost:hover { background: var(--bg-tint); border-color: var(--border-strong); }
+.btn-lg { padding: 0.8125rem 1.25rem; font-size: 0.9375rem; }
+
+/* ── Hero ─────────────────── */
+.hero { padding: 5.5rem 0 5rem; position: relative; overflow: hidden; }
+.hero-inner { display: grid; grid-template-columns: 1fr 1.05fr; gap: 4rem; align-items: center; }
+@media (max-width: 960px) { .hero-inner { grid-template-columns: 1fr; gap: 3rem; } }
+
+.hero h1 { margin-top: 1.25rem; }
+.hero h1 .serif { font-family: var(--font-display); font-style: italic; font-weight: 400; letter-spacing: -0.015em; }
+.hero h1 .dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 6px var(--blue-glow); vertical-align: middle; margin-right: 0.125rem; transform: translateY(-4px); }
+.hero-sub { margin-top: 1.5rem; max-width: 34rem; font-size: 1.0625rem; color: var(--text-secondary); }
+.hero-cta { margin-top: 2rem; display: flex; gap: 0.625rem; flex-wrap: wrap; }
+.hero-meta { margin-top: 2.5rem; display: flex; gap: 2rem; flex-wrap: wrap; align-items: center; }
+.hero-meta .item { font-size: 0.8125rem; }
+.hero-meta .num { font-size: 1.375rem; font-weight: 500; color: var(--ink); letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.hero-meta .lbl { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; margin-top: 0.375rem; }
+
+/* ── App mock ─────────────── */
+.mock {
+  background: var(--card); border-radius: 24px;
+  box-shadow: var(--shadow-card); border: 1px solid var(--border-light);
+  padding: 2rem; position: relative;
+  min-height: 560px;
+  overflow: hidden;
+}
+.mock-header { text-align: center; margin-bottom: 1.25rem; }
+.mock-header .logo { font-size: 1.125rem; margin: 0 auto; }
+.step-header { display: flex; align-items: center; gap: 0.625rem; margin-bottom: 1.125rem; }
+.step-number {
+  height: 22px; min-width: 22px; padding: 0 0.4375rem; border-radius: 999px;
+  background: var(--ink); color: var(--card);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.625rem; font-weight: 500;
+  letter-spacing: 0.04em; font-family: var(--font-mono);
+}
+.step-label {
+  font: 500 0.6875rem/1 var(--font-mono);
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
+}
+.mock-question {
+  font-size: 1.25rem; font-weight: 500; letter-spacing: -0.025em;
+  color: var(--ink); margin-bottom: 0.375rem;
+}
+.mock-hint { color: var(--muted); font-size: 0.8125rem; margin-bottom: 1rem; }
+
+.stepper { display: flex; align-items: center; gap: 1.75rem; justify-content: center; margin: 1.25rem 0; }
+.stepper .btn-round {
+  width: 36px; height: 36px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--card);
+  display: grid; place-items: center; color: var(--text-secondary);
+}
+.stepper .value {
+  font-size: 3rem; font-weight: 500; min-width: 3ch; text-align: center;
+  letter-spacing: -0.05em; color: var(--ink); font-variant-numeric: tabular-nums;
 }
 
-.lang-btn {
-  font-family: var(--font-mono);
-  padding: 0.3rem 0.75rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  transition: all var(--transition);
-  letter-spacing: 0.05em;
-  border-radius: 99px;
+.chips { display: flex; flex-wrap: wrap; gap: 0.375rem; margin: 0.5rem 0 1rem; }
+.chip {
+  padding: 0.4375rem 0.875rem; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--card);
+  font-size: 0.8125rem; color: var(--text-secondary); letter-spacing: -0.005em;
 }
+.chip.selected { background: var(--ink); color: var(--card); border-color: var(--ink); font-weight: 500; }
 
-.lang-btn.active {
-  background: var(--ink);
-  color: var(--card);
+.pills { display: flex; flex-wrap: wrap; gap: 0.375rem; justify-content: center; margin: 0.75rem 0; }
+.pill {
+  padding: 0.5rem 0.875rem; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--card);
+  font: 500 0.7rem/1 var(--font-mono);
+  color: var(--text-secondary); letter-spacing: 0.08em; text-transform: uppercase;
 }
+.pill.selected { background: var(--ink); color: var(--card); border-color: var(--ink); }
 
-.lang-btn:not(.active):hover {
-  color: var(--text);
+.progress-bar { display: flex; gap: 0.25rem; margin-top: 1.25rem; }
+.prog-seg { height: 2px; border-radius: 999px; flex: 1; background: var(--border-light); transition: background 0.6s var(--ease); }
+.prog-seg.done, .prog-seg.active { background: var(--ink); }
+
+/* Plan card (inside mock) */
+.plan-card {
+  background: var(--card); border-radius: 16px;
+  padding: 1.125rem 1.25rem 1rem;
+  border: 1px solid var(--border-light); margin-top: 0.5rem;
 }
+.plan-card-header {
+  font: 500 0.6875rem/1 var(--font-mono);
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
+  padding-bottom: 0.875rem; border-bottom: 1px solid var(--border-light);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.plan-row {
+  display: flex; align-items: flex-start; gap: 1rem;
+  padding: 0.75rem 0; border-bottom: 1px solid var(--border-light);
+}
+.plan-row:last-of-type { border-bottom: none; }
+.plan-day {
+  font: 500 0.6875rem/1 var(--font-mono);
+  color: var(--muted); width: 36px; flex-shrink: 0;
+  text-transform: uppercase; letter-spacing: 0.12em; padding-top: 0.25rem;
+}
+.plan-meals { flex: 1; }
+.plan-meal-name { font-size: 0.875rem; color: var(--ink); font-weight: 450; line-height: 1.4; letter-spacing: -0.005em; }
+.plan-meal-desc { font-size: 0.75rem; color: var(--muted); line-height: 1.5; margin-top: 0.0625rem; }
+.plan-footer {
+  margin-top: 0.25rem; padding-top: 0.875rem; border-top: 1px solid var(--border-light);
+  display: flex; justify-content: space-between; align-items: center;
+  font: 500 0.7rem/1 var(--font-mono); color: var(--muted); letter-spacing: 0.02em;
+}
+.plan-price { font: 500 0.9rem var(--font-sans); color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 
-/* ── Nav ─────────────────────────────────── */
-nav {
-  padding: 1.25rem 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  max-width: 1180px;
-  margin: 0 auto;
-  position: relative;
+/* Shopping receipt */
+.receipt { margin-top: 0.5rem; }
+.receipt-line {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0.375rem 0; font-size: 0.8125rem;
+}
+.receipt-line .name { flex: 1; margin-right: 1rem; color: var(--text); }
+.receipt-line .qty { color: var(--muted); margin-right: 0.5rem; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.6875rem; }
+.receipt-line .price { font-weight: 500; font-variant-numeric: tabular-nums; }
+.receipt-divider { border-top: 1px solid var(--border); margin: 0.5rem 0; }
+.receipt-total .name { font-weight: 600; }
+.receipt-total .price { font-weight: 600; color: var(--blue); }
+
+.actions { display: flex; gap: 0.5rem; margin-top: 1.25rem; }
+.mock-btn {
+  flex: 1; padding: 0.75rem 1rem; border-radius: 10px;
+  font: 500 0.8125rem/1 var(--font-sans); cursor: pointer;
+  border: 1px solid transparent; transition: all var(--transition);
+  letter-spacing: -0.005em;
+}
+.mock-btn-primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.mock-btn-secondary { background: var(--card); color: var(--ink); border-color: var(--border); }
+
+/* Slide fade for mock phase switching */
+.mock-phase { animation: slideUp 0.45s var(--ease); }
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Floating scene label */
+.scene-label {
+  position: absolute; top: 1rem; right: 1rem;
+  font: 500 0.625rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted); background: var(--bg-tint);
+  border: 1px solid var(--border-light); border-radius: 999px;
+  padding: 0.375rem 0.625rem;
+  display: inline-flex; align-items: center; gap: 0.375rem;
+}
+.scene-label::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-bg); }
+
+/* ── Sections ─────────────── */
+section { padding: 5.5rem 0; position: relative; }
+.section-head { max-width: 640px; margin-bottom: 3rem; }
+.section-head h2 { margin-top: 0.875rem; }
+.section-head p { margin-top: 1rem; font-size: 1.0625rem; }
+
+/* Steps */
+.steps {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--border); border: 1px solid var(--border); border-radius: 20px; overflow: hidden;
+}
+@media (max-width: 900px) { .steps { grid-template-columns: 1fr 1fr; } }
+.step {
+  background: var(--card); padding: 1.75rem 1.5rem;
+}
+.step .num {
+  font: 500 0.6875rem/1 var(--font-mono); color: var(--muted);
+  letter-spacing: 0.14em;
+}
+.step h3 { margin-top: 0.875rem; font-weight: 500; }
+.step p { margin-top: 0.5rem; font-size: 0.875rem; }
+.step .vis {
+  margin-top: 1.25rem; height: 70px; border-radius: 12px;
+  background: var(--bg-tint); border: 1px solid var(--border-light);
+  display: grid; place-items: center; overflow: hidden; padding: 0.5rem;
+}
+.vis-form { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 0 0.5rem; }
+.vis-form .r { display: flex; align-items: center; gap: 6px; font: 500 0.625rem/1 var(--font-mono); color: var(--text-secondary); }
+.vis-form .r::before { content: '✓'; color: var(--blue); font-family: var(--font-sans); font-weight: 600; font-size: 0.7rem; }
+.vis-llm { display: flex; gap: 5px; align-items: flex-end; height: 40px; }
+.vis-llm .b { width: 8px; background: var(--blue); border-radius: 2px; opacity: .8; animation: bar 1.6s ease-in-out infinite; }
+.vis-llm .b:nth-child(1){height:30%;animation-delay:0s}
+.vis-llm .b:nth-child(2){height:60%;animation-delay:.1s}
+.vis-llm .b:nth-child(3){height:80%;animation-delay:.2s}
+.vis-llm .b:nth-child(4){height:50%;animation-delay:.3s}
+.vis-llm .b:nth-child(5){height:70%;animation-delay:.4s}
+.vis-llm .b:nth-child(6){height:40%;animation-delay:.5s}
+@keyframes bar { 0%,100%{transform:scaleY(.5)} 50%{transform:scaleY(1)} }
+.vis-match { display: flex; align-items: center; gap: 0.625rem; font: 500 0.625rem/1 var(--font-mono); color: var(--text-secondary); }
+.vis-match .arrow { color: var(--blue); }
+.vis-del { display: flex; align-items: center; gap: 0.5rem; font: 500 0.625rem/1 var(--font-mono); color: var(--text-secondary); }
+.vis-del-icon { width: 20px; height: 14px; background: var(--blue); border-radius: 2px; position: relative; }
+.vis-del-icon::before { content: ''; position: absolute; right: -7px; top: 2px; width: 9px; height: 10px; background: var(--blue); border-radius: 2px 4px 4px 2px; }
+
+/* Week menu */
+.week-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; }
+@media (max-width: 900px) { .week-grid { grid-template-columns: repeat(2, 1fr); } }
+.dish {
+  background: var(--card); border: 1px solid var(--border-light); border-radius: 18px;
+  overflow: hidden; transition: all var(--transition);
+}
+.dish:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--border); }
+.dish .img {
+  aspect-ratio: 4/3; position: relative; overflow: hidden;
+  background-size: cover; background-position: center;
+}
+.dish .img::before {
+  content: ''; position: absolute; inset: 25%;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 60%);
+  border-radius: 50%;
+}
+.dish .img::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 55%, rgba(10,10,10,.35));
+}
+.dish .img .day {
+  position: absolute; top: 10px; left: 10px;
+  background: rgba(255,255,255,.92); color: var(--ink);
+  padding: 3px 7px; border-radius: 5px;
+  font: 500 0.625rem/1 var(--font-mono);
+  text-transform: uppercase; letter-spacing: 0.14em;
   z-index: 2;
 }
-
-.logo {
-  font-family: var(--font-sans);
-  font-size: 1.0625rem;
-  font-weight: 600;
-  color: var(--ink);
-  text-decoration: none;
-  letter-spacing: -0.02em;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+.dish .img .time {
+  position: absolute; bottom: 10px; right: 10px;
+  color: #fff; font: 500 0.625rem/1 var(--font-mono); z-index: 2;
 }
-
-.logo::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 0 4px var(--blue-glow);
+.dish .body { padding: 0.875rem 1rem 1rem; }
+.dish .name { font-weight: 500; font-size: 0.9375rem; letter-spacing: -0.01em; color: var(--ink); }
+.dish .tags { margin-top: 0.375rem; display: flex; gap: 0.375rem; flex-wrap: wrap; }
+.dish .tag {
+  font: 500 0.625rem/1 var(--font-mono); color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 3px 6px; border: 1px solid var(--border-light); border-radius: 4px;
 }
+.dish-1 .img { background: linear-gradient(135deg, #fff4d6 0%, #ffc872 100%); }
+.dish-2 .img { background: linear-gradient(135deg, #ffd4d4 0%, #ff8484 100%); }
+.dish-3 .img { background: linear-gradient(135deg, #d6edff 0%, #6fb3ff 100%); }
+.dish-4 .img { background: linear-gradient(135deg, #fff1c2 0%, #e89a20 100%); }
+.dish-5 .img { background: linear-gradient(135deg, #e5f8d9 0%, #7bc95b 100%); }
 
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+/* Features */
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+@media (max-width: 900px) { .features { grid-template-columns: 1fr; } }
+.feat {
+  background: var(--card); border: 1px solid var(--border-light); border-radius: 20px;
+  padding: 1.5rem; position: relative;
 }
-
-.nav-link {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--muted);
-  text-decoration: none;
-  transition: color var(--transition);
-  padding: 0.5rem 0.875rem;
-  border-radius: 8px;
+.feat .icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--blue-light); color: var(--blue);
+  display: grid; place-items: center; margin-bottom: 1rem;
 }
-
-.nav-link:hover { color: var(--text); background: var(--bg-tint); }
-
-nav a.nav-cta {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--card);
-  text-decoration: none;
-  background: var(--ink);
-  padding: 0.5rem 0.9375rem;
-  border-radius: 8px;
-  transition: all var(--transition);
-  border: 1px solid var(--ink);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(10,10,10,0.1);
+.feat h3 { font-size: 1rem; font-weight: 500; }
+.feat p { font-size: 0.875rem; margin-top: 0.5rem; }
+.feat.emphasis {
+  background: var(--ink); color: var(--card); border-color: var(--ink);
 }
+body.dark .feat.emphasis { background: var(--card); border: 1px solid var(--blue); }
+.feat.emphasis h3 { color: var(--card); }
+.feat.emphasis p { color: color-mix(in oklab, var(--card) 72%, transparent); }
+.feat.emphasis .icon { background: rgba(255,255,255,0.12); color: var(--card); }
+body.dark .feat.emphasis .icon { background: var(--blue-light); color: var(--blue); }
 
-nav a.nav-cta:hover {
-  background: var(--ink-soft);
-  transform: translateY(-1px);
+/* Nemlig flow */
+.integration {
+  display: grid; grid-template-columns: 1fr 1.05fr; gap: 3rem; align-items: center;
+  padding: 2.5rem; background: var(--card);
+  border: 1px solid var(--border-light); border-radius: 24px;
+  box-shadow: var(--shadow-card);
 }
-
-/* ── Hero ────────────────────────────────── */
-.hero {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 4rem 2rem 5rem;
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 4.5rem;
-  align-items: center;
-  position: relative;
-  z-index: 1;
+@media (max-width: 900px) { .integration { grid-template-columns: 1fr; padding: 1.75rem; } }
+.flow-card {
+  background: var(--bg-tint); border: 1px solid var(--border-light);
+  border-radius: 16px; padding: 0.75rem;
 }
-
-.hero-text { animation: fadeIn 0.6s cubic-bezier(0.2, 0, 0, 1); }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.hero-label {
-  font-family: var(--font-mono);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: var(--card);
-  padding: 0.3125rem 0.75rem 0.3125rem 0.5rem;
-  border-radius: 99px;
-  margin-bottom: 1.5rem;
-  border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(10,10,10,0.03);
-}
-
-.hero-label::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 0 3px var(--blue-glow);
-}
-
-.hero h1 {
-  font-size: clamp(2.25rem, 5.5vw, 3.75rem);
-  font-weight: 500;
-  line-height: 1.02;
-  letter-spacing: -0.035em;
-  margin-bottom: 1.5rem;
-  color: var(--ink);
-}
-
-.hero h1 em {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 400;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-
-.hero-text > p {
-  font-size: 1.0625rem;
-  color: var(--text-secondary);
-  max-width: 440px;
-  margin-bottom: 2rem;
-  line-height: 1.55;
-}
-
-.hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.btn-primary {
-  font-family: var(--font-sans);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--ink);
-  color: var(--card);
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 0.625rem 1.125rem;
-  border-radius: 8px;
-  text-decoration: none;
-  transition: all var(--transition);
-  border: 1px solid var(--ink);
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(10,10,10,0.1);
-  letter-spacing: -0.005em;
-}
-
-.btn-primary:hover {
-  background: var(--ink-soft);
-  transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 12px rgba(10,10,10,0.12);
-}
-
-.btn-primary svg { width: 14px; height: 14px; }
-
-.btn-ghost {
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--muted);
-  text-decoration: none;
-  transition: all var(--transition);
-  padding: 0.625rem 0.875rem;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.btn-ghost:hover { color: var(--text); background: var(--bg-tint); }
-
-.btn-ghost::after {
-  content: '→';
-  font-family: var(--font-mono);
-  opacity: 0.5;
-  transition: transform var(--transition);
-}
-
-.btn-ghost:hover::after { transform: translateX(2px); opacity: 1; }
-
-/* ── Week preview card ───────────────────── */
-.week-preview {
-  background: var(--card);
-  border-radius: 14px;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  box-shadow:
-    0 1px 2px rgba(10,10,10,0.03),
-    0 8px 24px rgba(10,10,10,0.04);
-  animation: fadeIn 0.6s cubic-bezier(0.2, 0, 0, 1) 0.1s both;
-  position: relative;
-}
-
-.week-header {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin-bottom: 0.25rem;
-  padding: 0 0.25rem 0.75rem;
-  border-bottom: 1px solid var(--border-light);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.week-header-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 0 3px var(--blue-glow);
-}
-
-.day-row {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  padding: 0.5rem 0.25rem;
-  border-bottom: 1px solid var(--border-light);
-  transition: background var(--transition);
-  border-radius: 6px;
-}
-
-.day-row:last-of-type { border-bottom: none; }
-
-.day-row:hover { background: var(--bg-tint); }
-
-.day-name {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: var(--muted);
-  width: 32px;
-  flex-shrink: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.day-meal {
-  font-size: 0.875rem;
-  color: var(--text);
-  flex: 1;
-  letter-spacing: -0.005em;
-}
-
-.week-footer {
-  margin-top: 0.5rem;
-  padding: 0.75rem 0.25rem 0;
-  border-top: 1px solid var(--border-light);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.75rem;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  letter-spacing: 0.01em;
-}
-
-.week-price {
-  font-weight: 500;
-  color: var(--ink);
+.flow-node {
+  background: var(--card); border: 1px solid var(--border-light); border-radius: 10px;
+  padding: 0.75rem 0.875rem; display: flex; gap: 0.625rem; align-items: center;
   font-size: 0.8125rem;
 }
+.flow-node .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); flex-shrink: 0; }
+.flow-node .k { font: 500 0.625rem/1 var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; flex-shrink: 0; }
+.flow-node .v { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-node .end { font: 500 0.75rem/1 var(--font-mono); color: var(--ink); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.flow-arrow { text-align: center; color: var(--muted); padding: 4px 0; font-size: 0.75rem; }
+.flow-node.accent { border-color: var(--blue); background: var(--blue-light); }
+.flow-node.accent .dot { box-shadow: 0 0 0 4px var(--blue-glow); }
+.integration-stats { margin-top: 2rem; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.integration-stats .s .lbl { font: 500 0.6875rem/1 var(--font-mono); color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; }
+.integration-stats .s .num { font-size: 1.75rem; font-weight: 500; letter-spacing: -0.03em; margin-top: 0.375rem; color: var(--ink); font-variant-numeric: tabular-nums; }
 
-/* ── What section ────────────────────────── */
-.what {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 6rem 2rem 5rem;
-  position: relative;
-  z-index: 1;
+/* Pricing */
+.price-card {
+  max-width: 480px; margin: 0 auto; text-align: center;
+  background: var(--card); border: 1px solid var(--border-light); border-radius: 24px;
+  padding: 2.5rem 2.25rem; box-shadow: var(--shadow-card); position: relative; overflow: hidden;
+}
+.price-card .amount {
+  font-size: 4.5rem; font-weight: 500; letter-spacing: -0.05em; line-height: 1;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.price-card .amount span { font-size: 1.125rem; color: var(--muted); font-weight: 400; margin-left: 0.25rem; letter-spacing: 0; }
+.price-card ul { list-style: none; margin: 1.75rem 0 1.75rem; display: flex; flex-direction: column; gap: 0.625rem; text-align: left; }
+.price-card li { display: flex; gap: 0.625rem; align-items: center; color: var(--text-secondary); font-size: 0.875rem; }
+.price-card li::before {
+  content: '✓'; color: var(--blue);
+  width: 16px; height: 16px; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--blue-light); border-radius: 50%;
+  font-size: 0.625rem; font-weight: 600;
 }
 
-.section-label {
-  font-family: var(--font-mono);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin-bottom: 1rem;
-}
-
-.section-label::before {
-  content: '';
-  width: 14px;
-  height: 1px;
-  background: var(--border-strong);
-}
-
-.section-head {
-  text-align: center;
-  margin-bottom: 3.5rem;
-}
-
-.section-head .section-label { display: inline-flex; }
-
-.what h2, .how h2, .cta h2 {
-  font-size: clamp(1.875rem, 4vw, 2.75rem);
-  font-weight: 500;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-  color: var(--ink);
-}
-
-.what h2 em, .how h2 em, .cta h2 em {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 400;
+/* FAQ */
+.faq { max-width: 720px; margin: 0 auto; border-top: 1px solid var(--border-light); }
+details.faq-item { border-bottom: 1px solid var(--border-light); padding: 1.125rem 0.25rem; }
+details.faq-item summary {
+  display: flex; justify-content: space-between; align-items: center;
+  cursor: pointer; list-style: none; font-weight: 500; font-size: 1rem; color: var(--ink);
   letter-spacing: -0.01em;
 }
+details.faq-item summary::-webkit-details-marker { display: none; }
+details.faq-item summary::after { content: '+'; font-weight: 300; font-size: 1.25rem; color: var(--muted); transition: transform .2s; }
+details.faq-item[open] summary::after { content: '−'; }
+details.faq-item p { margin-top: 0.625rem; font-size: 0.9375rem; }
 
-.what > .section-head > p,
-.how > .how-inner > .section-head > p {
-  color: var(--text-secondary);
-  font-size: 1rem;
-  max-width: 460px;
-  margin: 0.75rem auto 0;
-  line-height: 1.55;
-}
-
-.what-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-}
-
-.what-card {
-  background: var(--card);
-  border-radius: 14px;
-  padding: 1.75rem 1.5rem;
-  border: 1px solid var(--border);
-  transition: all var(--transition);
-  position: relative;
-  overflow: hidden;
-}
-
-.what-card::before {
-  content: attr(data-num);
-  position: absolute;
-  top: 1rem;
-  right: 1.25rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  color: var(--muted-soft);
-  letter-spacing: 0.04em;
-}
-
-.what-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: 0 1px 2px rgba(10,10,10,0.03), 0 12px 28px rgba(10,10,10,0.05);
-  transform: translateY(-2px);
-}
-
-.what-card h3 {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.what-card p {
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  line-height: 1.55;
-}
-
-.what-card-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--bg-tint);
-  border: 1px solid var(--border);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 1rem;
-  color: var(--ink);
-}
-
-.what-card-icon svg { width: 16px; height: 16px; }
-
-/* ── How section ─────────────────────────── */
-.how {
-  background: var(--card);
-  padding: 6rem 2rem;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  position: relative;
-  z-index: 1;
-}
-
-.how-inner {
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-.how-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin-top: 1rem;
-}
-
-.how-step {
-  display: flex;
-  gap: 1.5rem;
-  padding: 1.5rem 0;
-  border-bottom: 1px solid var(--border-light);
-  position: relative;
-  align-items: flex-start;
-}
-
-.how-step:last-child { border-bottom: none; }
-
-.how-num {
-  font-family: var(--font-mono);
-  min-width: 52px;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding-top: 0.25rem;
-  flex-shrink: 0;
-}
-
-.how-step-text h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 0.25rem;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.how-step-text p {
-  color: var(--text-secondary);
-  font-size: 0.9375rem;
-  line-height: 1.55;
-}
-
-/* ── CTA ─────────────────────────────────── */
-.cta {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 6rem 2rem;
-  text-align: center;
-  position: relative;
-  z-index: 1;
-}
-
-.cta-card {
-  background: var(--ink);
-  border-radius: 20px;
-  padding: 4rem 2rem;
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--ink);
-  box-shadow: 0 1px 2px rgba(10,10,10,0.1), 0 24px 48px rgba(10,10,10,0.15);
-}
-
-.cta-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
+/* Final CTA */
+.final-cta {
+  text-align: center; padding: 4.5rem 2.5rem; border-radius: 28px;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(37,99,235,0.35), transparent 70%),
-    radial-gradient(ellipse 60% 40% at 20% 100%, rgba(37,99,235,0.12), transparent 60%);
-  pointer-events: none;
+    radial-gradient(600px 240px at 50% 0%, var(--blue-light), transparent 70%),
+    var(--card);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-card);
 }
+.final-cta h2 { max-width: 640px; margin: 0.625rem auto 0; }
+.final-cta p { max-width: 480px; margin: 1rem auto 0; font-size: 1.0625rem; }
 
-.cta-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 30%, transparent 75%);
-  -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 30%, transparent 75%);
-  pointer-events: none;
-}
-
-.cta-card > * { position: relative; z-index: 1; }
-
-.cta-card .section-label {
-  color: rgba(255,255,255,0.55);
-}
-
-.cta-card .section-label::before {
-  background: rgba(255,255,255,0.2);
-}
-
-.cta-card h2 {
-  color: white;
-  margin-bottom: 0.75rem;
-}
-
-.cta-card h2 em { color: white; }
-
-.cta-card > p {
-  color: rgba(255,255,255,0.65);
-  font-size: 1rem;
-  margin-bottom: 2rem;
-  max-width: 420px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.btn-light {
-  font-family: var(--font-sans);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: white;
-  color: var(--ink);
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 0.625rem 1.25rem;
-  border-radius: 8px;
-  text-decoration: none;
-  transition: all var(--transition);
-  border: 1px solid white;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-  letter-spacing: -0.005em;
-}
-
-.btn-light:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-}
-
-.btn-light svg { width: 14px; height: 14px; }
-
-/* ── Footer ──────────────────────────────── */
-footer {
-  padding: 2.5rem 2rem;
+/* Footer */
+footer { padding: 3.5rem 0 2.5rem; border-top: 1px solid var(--border-light); }
+.foot { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 2.5rem; }
+@media (max-width: 800px) { .foot { grid-template-columns: 1fr 1fr; } }
+.foot h4 { font: 500 0.6875rem/1 var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 1rem; }
+.foot a { display: block; font-size: 0.875rem; color: var(--text-secondary); padding: 0.25rem 0; }
+.foot a:hover { color: var(--ink); }
+.foot-bottom {
+  margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-light);
+  display: flex; justify-content: space-between; gap: 1rem;
+  color: var(--muted); font-size: 0.8125rem; flex-wrap: wrap;
   font-family: var(--font-mono);
-  color: var(--muted);
-  font-size: 0.75rem;
-  letter-spacing: 0.02em;
-  background: var(--bg);
-  border-top: 1px solid var(--border);
-  position: relative;
-  z-index: 1;
 }
 
-.footer-inner {
-  max-width: 1180px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-footer a {
-  color: var(--muted);
-  text-decoration: none;
-  transition: color var(--transition);
-}
-
-footer a:hover { color: var(--ink); }
-
-.footer-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--ink);
-  font-weight: 500;
-}
-
-.footer-brand::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 0 3px var(--blue-glow);
-}
-
-/* ── Mobile ──────────────────────────────── */
-@media (max-width: 860px) {
-  .hero {
-    grid-template-columns: 1fr;
-    gap: 2.5rem;
-    padding: 2rem 1.25rem 3rem;
-  }
-  .hero-text > p { max-width: 100%; }
-  .what { padding: 4rem 1.25rem 3rem; }
-  .what-grid { grid-template-columns: 1fr; }
-  .how { padding: 4rem 1.25rem; }
-  .cta { padding: 4rem 1.25rem; }
-  .cta-card { padding: 3rem 1.5rem; border-radius: 16px; }
-  .lang-switch { top: 0.75rem; right: 0.75rem; }
-  nav { padding: 1rem 1.25rem; }
-  .footer-inner { justify-content: center; text-align: center; }
-}
 </style>
 </head>
 <body>
 
-<!-- Language switcher -->
-<div class="lang-switch" id="langSwitch">
-  <button class="lang-btn active" onclick="setLang('da')">DA</button>
-  <button class="lang-btn" onclick="setLang('en')">EN</button>
-</div>
-
-<!-- Nav -->
-<nav>
-  <a href="/" class="logo">Ugemad</a>
-  <div class="nav-links">
-    <a href="/meal-planner?mode=signin" class="nav-link" data-da="Log ind" data-en="Sign in"></a>
-    <a href="/meal-planner?mode=signup" class="nav-cta" data-da="Kom i gang" data-en="Get started"></a>
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="logo" href="/"><span>Ugemad</span></a>
+    <div class="nav-links">
+      <a href="#how" data-da="Sådan virker det" data-en="How it works"></a>
+      <a href="#uge" data-da="Ugens menu" data-en="This week"></a>
+      <a href="#nemlig">Nemlig</a>
+      <a href="#pris" data-da="Pris" data-en="Pricing"></a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="nav-right">
+      <div class="seg" id="lang-toggle">
+        <button data-lang="da" class="active">DA</button>
+        <button data-lang="en">EN</button>
+      </div>
+      <a class="btn btn-ghost" href="/meal-planner?mode=signin" data-da="Log ind" data-en="Sign in"></a>
+      <a class="btn btn-primary" href="/meal-planner?mode=signup" data-da="Kom i gang" data-en="Get started"></a>
+    </div>
   </div>
 </nav>
 
-<!-- Hero -->
-<section class="hero">
-  <div class="hero-text">
-    <div class="hero-label" data-da="Madplanlægning med AI" data-en="AI-powered meal planning"></div>
-    <h1 data-da="Hvad skal vi have <em>i denne uge?</em>" data-en="What are we having <em>this week?</em>"></h1>
-    <p data-da="Ugemad laver en komplet madplan med opskrifter, indkøbsliste og priser — tilpasset din familie, dit budget og dine præferencer." data-en="Ugemad creates a complete meal plan with recipes, shopping list, and prices — tailored to your family, budget, and preferences."></p>
-    <div class="hero-actions">
-      <a href="/meal-planner" class="btn-primary">
-        <span data-da="Prøv det gratis" data-en="Try it free"></span>
-        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"/></svg>
-      </a>
-      <a href="#hvordan" class="btn-ghost" data-da="Hvordan virker det?" data-en="How does it work?"></a>
-    </div>
-  </div>
-
-  <div class="week-preview">
-    <div class="week-header">
-      <span data-da="Uge 15 — madplan" data-en="Week 15 — meal plan"></span>
-      <span class="week-header-dot"></span>
-    </div>
-    <div class="day-row">
-      <span class="day-name" data-da="Man" data-en="Mon"></span>
-      <span class="day-meal" data-da="Kylling i karry med jasminris" data-en="Chicken curry with jasmine rice"></span>
-    </div>
-    <div class="day-row">
-      <span class="day-name" data-da="Tir" data-en="Tue"></span>
-      <span class="day-meal" data-da="Pasta med kødsauce og parmesan" data-en="Pasta with meat sauce and parmesan"></span>
-    </div>
-    <div class="day-row">
-      <span class="day-name" data-da="Ons" data-en="Wed"></span>
-      <span class="day-meal" data-da="Laksefrikadeller med remoulade" data-en="Salmon patties with remoulade"></span>
-    </div>
-    <div class="day-row">
-      <span class="day-name" data-da="Tor" data-en="Thu"></span>
-      <span class="day-meal" data-da="Butternut squash-suppe og brød" data-en="Butternut squash soup and bread"></span>
-    </div>
-    <div class="day-row">
-      <span class="day-name" data-da="Fre" data-en="Fri"></span>
-      <span class="day-meal" data-da="Hjemmelavet pizza med mozzarella" data-en="Homemade pizza with mozzarella"></span>
-    </div>
-    <div class="week-footer">
-      <span data-da="5 dage · 2 personer" data-en="5 days · 2 people"></span>
-      <span class="week-price">487 kr</span>
-    </div>
-  </div>
-</section>
-
-<!-- What it does -->
-<section class="what">
-  <div class="section-head">
-    <div class="section-label" data-da="Funktioner" data-en="Features"></div>
-    <h2 data-da="Hverdagsmad uden <em>besvær</em>" data-en="Weekday meals, <em>no hassle</em>"></h2>
-    <p data-da="Fortæl hvad du har lyst til, og lad AI'en klare resten." data-en="Tell us what you're in the mood for and let the AI handle the rest."></p>
-  </div>
-  <div class="what-grid">
-    <div class="what-card" data-num="01">
-      <div class="what-card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3"/><path d="M5 21c0-3.87 3.13-7 7-7s7 3.13 7 7"/></svg>
+<header class="hero">
+  <div class="container">
+    <div class="hero-inner">
+      <div>
+        <span class="kicker" data-da="Ugemad · din madplanlægger" data-en="Ugemad · your meal planner"></span>
+        <h1>
+          <span data-da="Hele ugens" data-en="A whole week"></span><br/>
+          <span class="serif" data-da="middage," data-en="of dinners,"></span>
+          <span data-da="planlagt." data-en="planned."></span>
+        </h1>
+        <p class="hero-sub"
+           data-da="Svar på seks små spørgsmål. AI'en bygger en madplan — balanceret, indenfor budget — og lægger ingredienserne direkte i din nemlig.com kurv."
+           data-en="Answer six short questions. The AI builds a meal plan — balanced, within budget — and drops the ingredients straight into your nemlig.com cart."></p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href="/meal-planner">
+            <span data-da="Start min uge" data-en="Start my week"></span>
+          </a>
+          <a class="btn btn-ghost btn-lg" href="#uge" data-da="Se eksempel" data-en="See a sample"></a>
+        </div>
+        <div class="hero-meta">
+          <div class="item">
+            <div class="num">3 min</div>
+            <div class="lbl" data-da="til en plan" data-en="to a plan"></div>
+          </div>
+          <div class="item">
+            <div class="num">−80%</div>
+            <div class="lbl" data-da="madspild" data-en="food waste"></div>
+          </div>
+        </div>
       </div>
-      <h3 data-da="Personlig madplan" data-en="Personal meal plan"></h3>
-      <p data-da="AI'en forstår dine kostvaner, allergier og hvad du har lyst til. Du får en ugeplan der passer lige præcis til din husstand." data-en="The AI understands your dietary habits, allergies, and cravings. You get a weekly plan that fits your exact household."></p>
-    </div>
-    <div class="what-card" data-num="02">
-      <div class="what-card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h2l2.4 12.2a2 2 0 002 1.6h9.7a2 2 0 002-1.6L22 7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg>
+
+      <!-- Animated app mock — rotates through real product UI phases -->
+      <div class="mock" id="mock">
+        <span class="scene-label" id="scene-label" data-da="live demo" data-en="live demo"></span>
+        <div class="mock-header">
+          <div class="logo"><span>Ugemad</span></div>
+        </div>
+        <div id="mock-app"></div>
+        <div class="progress-bar" id="mock-progress"></div>
       </div>
-      <h3 data-da="Indkøbsliste med priser" data-en="Shopping list with prices"></h3>
-      <p data-da="Alle ingredienser samles i en indkøbsliste med rigtige priser. Du kan fjerne eller tilføje varer, og sende det hele til din kurv." data-en="All ingredients are collected in a shopping list with real prices. Remove or add items and send it all to your basket."></p>
-    </div>
-    <div class="what-card" data-num="03">
-      <div class="what-card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
-      </div>
-      <h3 data-da="Inden for dit budget" data-en="Within your budget"></h3>
-      <p data-da="Sæt et ugebudget og AI'en planlægger derefter. Du ser den samlede pris før du handler — ingen overraskelser." data-en="Set a weekly budget and the AI plans accordingly. See the total price before you shop — no surprises."></p>
     </div>
   </div>
-</section>
+</header>
 
-<!-- How it works -->
-<section class="how" id="hvordan">
-  <div class="how-inner">
+<section id="how">
+  <div class="container">
     <div class="section-head">
-      <div class="section-label" data-da="Sådan virker det" data-en="How it works"></div>
-      <h2 data-da="Tre trin til <em>ugens mad</em>" data-en="Three steps to <em>the week's meals</em>"></h2>
+      <span class="kicker" data-da="Sådan virker det" data-en="How it works"></span>
+      <h2><span data-da="Fire trin. " data-en="Four steps. "></span><span class="display" data-da="nul hovedbrud." data-en="zero headaches."></span></h2>
+      <p data-da="Fra de første seks spørgsmål til kassen står ved døren — Ugemad tager sig af alt imellem." data-en="From the first six questions to the box at your door — Ugemad handles everything in between."></p>
     </div>
-    <div class="how-steps">
-      <div class="how-step">
-        <div class="how-num">Step 01</div>
-        <div class="how-step-text">
-          <h3 data-da="Forbind din dagligvarebutik" data-en="Connect your grocery store"></h3>
-          <p data-da="Tilknyt din foretrukne online dagligvarebutik. Vi finder produkter og priser direkte derfra." data-en="Link your favourite online grocery store. We find products and prices directly from there."></p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">01</div>
+        <h3 data-da="Fortæl om jeres smag" data-en="Tell us your taste"></h3>
+        <p data-da="Seks hurtige spørgsmål. Allergier, budget, hvor mange munde. 90 sekunder." data-en="Six quick questions. Allergies, budget, how many mouths. 90 seconds."></p>
+        <div class="vis">
+          <div class="vis-form">
+            <div class="r" data-da="4 personer · ingen svinekød" data-en="4 people · no pork"></div>
+            <div class="r" data-da="budget 500 kr" data-en="budget 500 kr"></div>
+            <div class="r" data-da="max 30 min hverdage" data-en="max 30 min weekdays"></div>
+          </div>
         </div>
       </div>
-      <div class="how-step">
-        <div class="how-num">Step 02</div>
-        <div class="how-step-text">
-          <h3 data-da="Beskriv din uge" data-en="Describe your week"></h3>
-          <p data-da="Hvor mange er I? Hvilke dage? Allergier, budget, yndlingsretter — det tager under et minut." data-en="How many are you? Which days? Allergies, budget, favourite dishes — takes under a minute."></p>
+      <div class="step">
+        <div class="num">02</div>
+        <h3 data-da="AI'en planlægger" data-en="The AI plans"></h3>
+        <p data-da="En LLM kombinerer sæson, budget og præferencer til fem middage, der passer sammen." data-en="An LLM combines season, budget and preferences into five dinners that fit together."></p>
+        <div class="vis"><div class="vis-llm"><div class="b"></div><div class="b"></div><div class="b"></div><div class="b"></div><div class="b"></div><div class="b"></div></div></div>
+      </div>
+      <div class="step">
+        <div class="num">03</div>
+        <h3 data-da="Ingredienser → Nemlig" data-en="Ingredients → Nemlig"></h3>
+        <p data-da="Hver ingrediens matches til en rigtig vare. Du ser den præcise kurv før bekræftelse." data-en="Every ingredient matched to a real product. You see the cart before confirming."></p>
+        <div class="vis">
+          <div class="vis-match"><span>ingredient.yaml</span><span class="arrow">→</span><span>nemlig.sku</span></div>
         </div>
       </div>
-      <div class="how-step">
-        <div class="how-num">Step 03</div>
-        <div class="how-step-text">
-          <h3 data-da="Få din madplan og bestil" data-en="Get your meal plan and order"></h3>
-          <p data-da="AI'en laver en komplet ugeplan med opskrifter og indkøbsliste. Godkend, og varerne lander i din kurv." data-en="The AI creates a complete weekly plan with recipes and a shopping list. Approve, and the items land in your basket."></p>
+      <div class="step">
+        <div class="num">04</div>
+        <h3 data-da="Levering mandag" data-en="Delivery Monday"></h3>
+        <p data-da="Nemlig leverer i dit valgte vindue. Opskrifter klar i appen. Du laver bare mad." data-en="Nemlig delivers in your chosen slot. Recipes wait in-app. You just cook."></p>
+        <div class="vis">
+          <div class="vis-del"><span class="vis-del-icon"></span><span data-da="man · 08:00–09:00" data-en="mon · 08:00–09:00"></span></div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- CTA -->
-<section class="cta">
-  <div class="cta-card">
-    <div class="section-label" data-da="Kom i gang" data-en="Get started"></div>
-    <h2 data-da="Prøv Ugemad <em>i dag</em>" data-en="Try Ugemad <em>today</em>"></h2>
-    <p data-da="Gratis at bruge. Ingen kreditkort." data-en="Free to use. No credit card needed."></p>
-    <a href="/meal-planner" class="btn-light">
-      <span data-da="Lav din første madplan" data-en="Create your first meal plan"></span>
-      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"/></svg>
-    </a>
+<section id="uge">
+  <div class="container">
+    <div class="section-head" style="display:flex; justify-content:space-between; align-items:flex-end; max-width:none; gap:1.5rem; flex-wrap:wrap;">
+      <div style="max-width:560px;">
+        <span class="kicker" data-da="Ugens menu · uge 16" data-en="This week · week 16"></span>
+        <h2 style="margin-top:0.875rem;"><span data-da="Sådan ser en rigtig " data-en="Here's what a real "></span><span class="display" data-da="uge ud." data-en="week looks like."></span></h2>
+        <p style="margin-top:1rem;" data-da="Fem middage — balanceret på protein, grønt og fibre. Byt hvad som helst, AI'en foreslår alternativer." data-en="Five dinners — balanced across protein, greens and fiber. Swap anything, the AI suggests alternatives."></p>
+      </div>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <span class="chip" style="pointer-events:none;"><span data-da="32 varer" data-en="32 items"></span></span>
+        <span class="chip" style="pointer-events:none;">487 kr</span>
+        <span class="chip" style="pointer-events:none;">4 <span data-da="personer" data-en="people"></span></span>
+      </div>
+    </div>
+
+    <div class="week-grid">
+      <div class="dish dish-1">
+        <div class="img"><span class="day" data-da="Man" data-en="Mon"></span><span class="time">20 min</span></div>
+        <div class="body">
+          <div class="name" data-da="Pasta al limone" data-en="Pasta al limone"></div>
+          <div class="tags"><span class="tag" data-da="vegetarisk" data-en="veg"></span><span class="tag">quick</span></div>
+        </div>
+      </div>
+      <div class="dish dish-2">
+        <div class="img"><span class="day" data-da="Tir" data-en="Tue"></span><span class="time">25 min</span></div>
+        <div class="body">
+          <div class="name" data-da="Bagt laks, dild, kartofler" data-en="Baked salmon, dill, potatoes"></div>
+          <div class="tags"><span class="tag">omega-3</span><span class="tag" data-da="sæson" data-en="seasonal"></span></div>
+        </div>
+      </div>
+      <div class="dish dish-3">
+        <div class="img"><span class="day" data-da="Ons" data-en="Wed"></span><span class="time">15 min</span></div>
+        <div class="body">
+          <div class="name" data-da="Miso-suppe med ris" data-en="Miso soup with rice"></div>
+          <div class="tags"><span class="tag">light</span><span class="tag">15 min</span></div>
+        </div>
+      </div>
+      <div class="dish dish-4">
+        <div class="img"><span class="day" data-da="Tor" data-en="Thu"></span><span class="time">30 min</span></div>
+        <div class="body">
+          <div class="name" data-da="Kikært-karry" data-en="Chickpea curry"></div>
+          <div class="tags"><span class="tag">protein</span><span class="tag" data-da="vegansk" data-en="vegan"></span></div>
+        </div>
+      </div>
+      <div class="dish dish-5">
+        <div class="img"><span class="day" data-da="Fre" data-en="Fri"></span><span class="time">40 min</span></div>
+        <div class="body">
+          <div class="name" data-da="Hjemmelavet pizza" data-en="Homemade pizza"></div>
+          <div class="tags"><span class="tag" data-da="fredag" data-en="friday"></span><span class="tag" data-da="børnevenlig" data-en="kid-friendly"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="section-head">
+      <span class="kicker" data-da="Hvorfor Ugemad" data-en="Why Ugemad"></span>
+      <h2><span data-da="Den stille revolution i " data-en="The quiet revolution in "></span><span class="display">"hvad skal vi spise?"</span></h2>
+    </div>
+    <div class="features">
+      <div class="feat">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
+        <h3 data-da="Ingen beslutninger" data-en="No decisions"></h3>
+        <p data-da="AI'en har allerede valgt. Du kan un-vælge alt med ét tryk." data-en="The AI has already chosen. You can un-choose anything with one tap."></p>
+      </div>
+      <div class="feat">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 6l3-3 3 3M6 3v12M21 18l-3 3-3-3M18 21V9"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/></svg></div>
+        <h3 data-da="Mindre madspild" data-en="Less food waste"></h3>
+        <p data-da="Retterne deler ingredienser på tværs af ugen — intet rådner i skuffen." data-en="Recipes share ingredients across the week — nothing rots in the drawer."></p>
+      </div>
+      <div class="feat">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10h4l1 3v4h-5z"/><circle cx="7" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg></div>
+        <h3 data-da="Direkte til Nemlig" data-en="Straight to Nemlig"></h3>
+        <p data-da="Hele kurven bygges automatisk hos nemlig.com — I vælger bare leveringstid." data-en="The whole cart is built automatically at nemlig.com — just pick a delivery slot."></p>
+      </div>
+      <div class="feat">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></div>
+        <h3 data-da="Børne-sikre retter" data-en="Kid-proof recipes"></h3>
+        <p data-da="Filtre for kræsne spisere. Vi husker, hvad der ikke gled ned sidste gang." data-en="Filters for picky eaters. We remember what didn't go down last time."></p>
+      </div>
+      <div class="feat">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 2v20M17 5H9a3 3 0 000 6h6a3 3 0 010 6H7"/></svg></div>
+        <h3 data-da="Fast ugepris" data-en="Fixed weekly price"></h3>
+        <p data-da="487 kr. Ingen skjulte tillæg. Nemlig-levering inkluderet." data-en="487 kr. No hidden fees. Nemlig delivery included."></p>
+      </div>
+      <div class="feat emphasis">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.5 7.1 18.2 8 12.7 4 8.8 9.5 8z"/></svg></div>
+        <h3 data-da="Sund by default" data-en="Healthy by default"></h3>
+        <p data-da="Balanceret protein, grønt og fibre — uden at tælle kalorier." data-en="Balanced protein, greens, fiber — no calorie-counting."></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="nemlig">
+  <div class="container">
+    <div class="integration">
+      <div>
+        <span class="kicker" data-da="Integration" data-en="Integration"></span>
+        <h2 style="margin-top:0.875rem;"><span data-da="Drevet af " data-en="Powered by "></span><span class="display">nemlig.com</span></h2>
+        <p style="margin-top:1rem; font-size:1.0625rem;" data-da="Vi kører direkte på Nemligs katalog. Hver ingrediens matches til en rigtig vare — med pris, vægt og lagerstatus — før du bekræfter." data-en="We plug straight into Nemlig's catalog. Every ingredient matched to a real product — with price, weight, stock — before you confirm."></p>
+        <div class="integration-stats">
+          <div class="s"><div class="lbl" data-da="Match-rate" data-en="Match rate"></div><div class="num">99.4%</div></div>
+          <div class="s"><div class="lbl" data-da="Varer / uge" data-en="Items / week"></div><div class="num">28–34</div></div>
+          <div class="s"><div class="lbl" data-da="Levering" data-en="Delivery"></div><div class="num" data-da="Inkl." data-en="Incl."></div></div>
+        </div>
+      </div>
+      <div class="flow-card">
+        <div class="flow-node">
+          <span class="dot"></span>
+          <span class="k">01 · <span data-da="opskrift" data-en="recipe"></span></span>
+          <span class="v" data-da="Pasta al limone (4 pers.)" data-en="Pasta al limone (4 pp)"></span>
+          <span class="end">4 pp</span>
+        </div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-node">
+          <span class="dot"></span>
+          <span class="k">02 · <span data-da="ingredienser" data-en="ingredients"></span></span>
+          <span class="v" data-da="spaghetti, citroner, parmesan…" data-en="spaghetti, lemons, parmesan…"></span>
+          <span class="end">7</span>
+        </div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-node accent">
+          <span class="dot"></span>
+          <span class="k">03 · nemlig.com</span>
+          <span class="v" data-da="Matchet automatisk" data-en="Matched automatically"></span>
+          <span class="end">7/7</span>
+        </div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-node">
+          <span class="dot"></span>
+          <span class="k">04 · <span data-da="kurv" data-en="cart"></span></span>
+          <span class="v" data-da="Klar til bekræftelse" data-en="Ready to confirm"></span>
+          <span class="end">68,50 kr</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pris">
+  <div class="container">
+    <div class="section-head" style="text-align:center; max-width:600px; margin:0 auto 3rem;">
+      <span class="kicker" data-da="Pris" data-en="Pricing"></span>
+      <h2><span data-da="Én pris. " data-en="One price. "></span><span class="display" data-da="intet abonnement." data-en="no subscription."></span></h2>
+      <p data-da="Betal pr. uge. Spring over når I er væk. Stop når som helst." data-en="Pay per week. Skip when you're away. Cancel any time."></p>
+    </div>
+    <div class="price-card">
+      <span class="kicker" data-da="Ugemad · familie" data-en="Ugemad · family"></span>
+      <div class="amount" style="margin-top:0.875rem;">487<span data-da="kr / uge" data-en="kr / week"></span></div>
+      <div class="muted mono" style="margin-top:0.5rem;" data-da="~ 24 kr pr. måltid for 4 personer" data-en="~ 24 kr per meal for 4 people"></div>
+      <ul>
+        <li><span data-da="5 middage for hele familien" data-en="5 dinners for the whole family"></span></li>
+        <li><span data-da="Alle ingredienser fra nemlig.com" data-en="All ingredients from nemlig.com"></span></li>
+        <li><span data-da="Levering inkluderet" data-en="Delivery included"></span></li>
+        <li><span data-da="Opskrifter + indkøbsliste i app" data-en="Recipes + shopping list in-app"></span></li>
+        <li><span data-da="Byt retter, spring over uger, stop når som helst" data-en="Swap meals, skip weeks, cancel anytime"></span></li>
+      </ul>
+      <a class="btn btn-primary btn-lg" href="/meal-planner" style="width:100%; justify-content:center;" data-da="Start min første uge" data-en="Start my first week"></a>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="container">
+    <div class="section-head" style="text-align:center; margin:0 auto 3rem; max-width:600px;">
+      <span class="kicker">FAQ</span>
+      <h2><span data-da="Spørgsmål vi får " data-en="Questions we get "></span><span class="display" data-da="ofte." data-en="a lot."></span></h2>
+    </div>
+    <div class="faq">
+      <details class="faq-item" open>
+        <summary data-da="Hvordan fungerer integrationen med Nemlig?" data-en="How does the Nemlig integration work?"></summary>
+        <p data-da="Vi matcher hver ingrediens i madplanen til en rigtig vare i Nemligs katalog. I ser kurven fuldt opgjort — vægt, pris, lagerstatus — før I bekræfter. Bestillingen lander på jeres Nemlig-konto." data-en="We match every ingredient in your meal plan to a real product in Nemlig's catalog. You see the itemised cart — weight, price, stock — before confirming. The order lands on your Nemlig account."></p>
+      </details>
+      <details class="faq-item">
+        <summary data-da="Kan jeg bytte en ret jeg ikke gider?" data-en="Can I swap a meal I don't want?"></summary>
+        <p data-da="Ja. Tryk 'byt' på enhver ret, og AI'en foreslår en anden inden for samme budget, tid og allergiprofil. Kurven opdateres automatisk." data-en="Yes. Tap 'swap' on any meal and the AI suggests another within the same budget, time and allergy profile. The cart updates automatically."></p>
+      </details>
+      <details class="faq-item">
+        <summary data-da="Hvad nu hvis jeg er væk en uge?" data-en="What if I'm away for a week?"></summary>
+        <p data-da="Slå ugen fra i appen — ingen bestilling, ingen betaling. Slå den til igen, når I er hjemme." data-en="Toggle the week off in the app — no order, no charge. Toggle it back on when you're home."></p>
+      </details>
+      <details class="faq-item">
+        <summary data-da="Er AI'en sikker på allergier?" data-en="Is the AI reliable on allergies?"></summary>
+        <p data-da="Allergier er hårde filtre — de fjerner hele opskrifter før AI'en overhovedet ser dem." data-en="Allergies are hard filters — they remove entire recipes before the AI ever sees them."></p>
+      </details>
+      <details class="faq-item">
+        <summary data-da="Hvem står bag?" data-en="Who's behind this?"></summary>
+        <p data-da="Et lille team i København. Vi byggede Ugemad, fordi vi selv blev trætte af at google 'let aftensmad' hver mandag." data-en="A small team in Copenhagen. We built Ugemad because we got tired of googling 'easy dinner' every Monday."></p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="final-cta">
+      <span class="kicker" data-da="Klar til en uge uden 'hvad skal vi spise?'" data-en="Ready for a week without 'what's for dinner?'"></span>
+      <h2><span data-da="Tre minutter i aften. " data-en="Three minutes tonight. "></span><span class="display" data-da="middag klar hele ugen." data-en="dinner sorted all week."></span></h2>
+      <p data-da="Start samtalen nu. Spring over næste uge, hvis I vil. Ingen binding." data-en="Start the chat now. Skip next week if you want. No strings attached."></p>
+      <div style="margin-top:1.75rem; display:inline-flex; gap:0.5rem; flex-wrap:wrap; justify-content:center;">
+        <a class="btn btn-primary btn-lg" href="/meal-planner" data-da="Planlæg min uge · 487 kr" data-en="Plan my week · 487 kr"></a>
+        <a class="btn btn-ghost btn-lg" href="#uge" data-da="Se eksempel-ugen" data-en="See a sample week"></a>
+      </div>
+    </div>
   </div>
 </section>
 
 <footer>
-  <div class="footer-inner">
-    <span class="footer-brand">Ugemad</span>
-    <span>&copy; 2026 · <span data-da="Lavet i København" data-en="Made in Copenhagen"></span></span>
+  <div class="container">
+    <div class="foot">
+      <div>
+        <div class="logo"><span>Ugemad</span></div>
+        <p style="margin-top:0.875rem; font-size:0.8125rem; max-width:240px;" data-da="Din ugentlige madplan — AI-kurateret, leveret af nemlig.com." data-en="Your weekly meal plan — AI-curated, delivered by nemlig.com."></p>
+      </div>
+      <div>
+        <h4 data-da="Produkt" data-en="Product"></h4>
+        <a data-da="Sådan virker det" data-en="How it works"></a>
+        <a data-da="Priser" data-en="Pricing"></a>
+        <a data-da="Ugens menu" data-en="This week"></a>
+        <a data-da="Opskrifter" data-en="Recipes"></a>
+      </div>
+      <div>
+        <h4 data-da="Virksomhed" data-en="Company"></h4>
+        <a data-da="Om os" data-en="About"></a>
+        <a data-da="Presse" data-en="Press"></a>
+        <a data-da="Kontakt" data-en="Contact"></a>
+        <a data-da="Jobs" data-en="Careers"></a>
+      </div>
+      <div>
+        <h4 data-da="Juridisk" data-en="Legal"></h4>
+        <a data-da="Handelsbetingelser" data-en="Terms"></a>
+        <a data-da="Privatliv" data-en="Privacy"></a>
+        <a data-da="Cookies" data-en="Cookies"></a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 · Ugemad ApS · CVR 12345678</span>
+      <span data-da="Made with onions in Copenhagen" data-en="Made with onions in Copenhagen"></span>
+    </div>
   </div>
 </footer>
 
 <script>
-let lang = localStorage.getItem('ugemad_lang') || 'da';
+  // ---- Language ----
+  function setLang(lang) {
+    document.querySelectorAll('[data-da][data-en]').forEach(el => {
+      const txt = lang === 'da' ? el.dataset.da : el.dataset.en;
+      el.textContent = txt;
+    });
+    document.querySelectorAll('#lang-toggle button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    document.documentElement.setAttribute('lang', lang);
+    try { localStorage.setItem('ugemad_lang', lang); } catch(e){}
+    startMock();
+  }
+  document.querySelectorAll('#lang-toggle button').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
+  let startLang = 'da';
+  try { const l = localStorage.getItem('ugemad_lang'); if (l === 'en' || l === 'da') startLang = l; } catch(e){}
 
-function setLang(l) {
-  lang = l;
-  localStorage.setItem('ugemad_lang', l);
-  document.documentElement.lang = l;
-  document.querySelectorAll('[data-da]').forEach(el => {
-    el.innerHTML = el.getAttribute('data-' + l);
-  });
-  document.querySelectorAll('.lang-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.textContent.trim() === l.toUpperCase());
-  });
-  document.title = l === 'da' ? 'Ugemad \u2014 Din ugentlige madplan' : 'Ugemad \u2014 Your weekly meal plan';
-}
+  // ---- Animated in-product demo ----
+  function getLang() { return document.documentElement.getAttribute('lang') === 'en' ? 'en' : 'da'; }
 
-// Init
-setLang(lang);
+  const TRANSLATIONS = {
+    da: {
+      scene1: 'Trin 1 · Præferencer',
+      scene2: 'Trin 3 · Allergier & diæt',
+      scene3: 'Trin 4 · Budget',
+      scene4: 'Resultat · Din madplan',
+      scene5: 'Resultat · Nemlig kurv',
+      q1: 'Hvor mange spiser med?',
+      h1: 'Hele hustanden tælles med.',
+      q2: 'Nogen diætkrav?',
+      h2: 'Vælg alle der passer. Allergier er hårde filtre.',
+      q3: 'Ugentligt budget?',
+      h3: 'Inkl. levering fra nemlig.com.',
+      planHead: 'Uge 16 · 5 middage',
+      days: ['MAN','TIR','ONS','TOR','FRE'],
+      meals: [
+        ['Pasta al limone', 'Citron, parmesan, basilikum · 20 min'],
+        ['Bagt laks med dild', 'Kartofler, dilddressing · 25 min'],
+        ['Miso-suppe m. ris', 'Tofu, svampe, forårsløg · 15 min'],
+        ['Kikært-karry', 'Kokos, spinat, ris · 30 min'],
+        ['Hjemmelavet pizza', 'Mozzarella, rucola · 40 min'],
+      ],
+      ingredientCount: '32 varer · nemlig.com',
+      weekTotal: 'i alt',
+      diets: ['Ingen svinekød','Nødfri','Laktosefri','Vegansk','Lavt på kulhydrat','Glutenfri'],
+      dietSelected: [0, 1],
+      back: 'Tilbage',
+      next: 'Næste →',
+      viewPlan: 'Se min madplan',
+      sendCart: 'Send til nemlig.com',
+      orderCart: 'Bekræft bestilling',
+      items: [
+        ['Spaghetti 500g', '1 stk', '14,95 kr'],
+        ['Citroner øko', '4 stk', '19,80 kr'],
+        ['Parmesan 200g', '1 stk', '42,00 kr'],
+        ['Laksfileter 400g', '1 pk', '89,00 kr'],
+        ['Dild frisk', '1 bdt', '12,50 kr'],
+        ['Nye kartofler 1kg', '1 pose', '24,95 kr'],
+      ],
+      more: 'og 26 andre varer',
+      subtotal: 'Subtotal',
+      delivery: 'Levering',
+      included: 'Inkluderet',
+      total: 'I alt',
+    },
+    en: {
+      scene1: 'Step 1 · Preferences',
+      scene2: 'Step 3 · Allergies & diet',
+      scene3: 'Step 4 · Budget',
+      scene4: 'Result · Your meal plan',
+      scene5: 'Result · Nemlig cart',
+      q1: 'How many people are eating?',
+      h1: 'Count the whole household.',
+      q2: 'Any dietary requirements?',
+      h2: 'Pick all that apply. Allergies are hard filters.',
+      q3: 'Weekly budget?',
+      h3: 'Incl. delivery from nemlig.com.',
+      planHead: 'Week 16 · 5 dinners',
+      days: ['MON','TUE','WED','THU','FRI'],
+      meals: [
+        ['Pasta al limone', 'Lemon, parmesan, basil · 20 min'],
+        ['Baked salmon with dill', 'Potatoes, dill dressing · 25 min'],
+        ['Miso soup with rice', 'Tofu, mushrooms, scallion · 15 min'],
+        ['Chickpea curry', 'Coconut, spinach, rice · 30 min'],
+        ['Homemade pizza', 'Mozzarella, arugula · 40 min'],
+      ],
+      ingredientCount: '32 items · nemlig.com',
+      weekTotal: 'total',
+      diets: ['No pork','Nut-free','Lactose-free','Vegan','Low-carb','Gluten-free'],
+      dietSelected: [0, 1],
+      back: 'Back',
+      next: 'Next →',
+      viewPlan: 'View my plan',
+      sendCart: 'Send to nemlig.com',
+      orderCart: 'Confirm order',
+      items: [
+        ['Spaghetti 500g', '1 pc', '14.95 kr'],
+        ['Organic lemons', '4 pcs', '19.80 kr'],
+        ['Parmesan 200g', '1 pc', '42.00 kr'],
+        ['Salmon fillets 400g', '1 pk', '89.00 kr'],
+        ['Fresh dill', '1 bu', '12.50 kr'],
+        ['New potatoes 1kg', '1 bag', '24.95 kr'],
+      ],
+      more: 'and 26 more items',
+      subtotal: 'Subtotal',
+      delivery: 'Delivery',
+      included: 'Included',
+      total: 'Total',
+    }
+  };
+
+  function renderProgress(activeIdx, totalSteps) {
+    const bar = document.getElementById('mock-progress');
+    let html = '';
+    for (let i = 0; i < totalSteps; i++) {
+      const cls = i < activeIdx ? 'done' : i === activeIdx ? 'active' : '';
+      html += `<span class="prog-seg ${cls}"></span>`;
+    }
+    bar.innerHTML = html;
+  }
+
+  function sceneHeader(num, label) {
+    return `<div class="step-header"><span class="step-number">${num}</span><span class="step-label">${label}</span></div>`;
+  }
+
+  function scene1(t) {
+    return `
+      <div class="mock-phase">
+        ${sceneHeader('01', t.scene1.split('·')[1].trim().toUpperCase())}
+        <div class="mock-question">${t.q1}</div>
+        <div class="mock-hint">${t.h1}</div>
+        <div class="stepper">
+          <button class="btn-round">−</button>
+          <div class="value">4</div>
+          <button class="btn-round">+</button>
+        </div>
+        <div class="actions">
+          <button class="mock-btn mock-btn-secondary">${t.back}</button>
+          <button class="mock-btn mock-btn-primary">${t.next}</button>
+        </div>
+      </div>`;
+  }
+
+  function scene2(t) {
+    const chips = t.diets.map((d, i) => `<span class="chip ${t.dietSelected.includes(i) ? 'selected' : ''}">${d}</span>`).join('');
+    return `
+      <div class="mock-phase">
+        ${sceneHeader('03', t.scene2.split('·')[1].trim().toUpperCase())}
+        <div class="mock-question">${t.q2}</div>
+        <div class="mock-hint">${t.h2}</div>
+        <div class="chips">${chips}</div>
+        <div class="actions">
+          <button class="mock-btn mock-btn-secondary">${t.back}</button>
+          <button class="mock-btn mock-btn-primary">${t.next}</button>
+        </div>
+      </div>`;
+  }
+
+  function scene3(t) {
+    return `
+      <div class="mock-phase">
+        ${sceneHeader('04', t.scene3.split('·')[1].trim().toUpperCase())}
+        <div class="mock-question">${t.q3}</div>
+        <div class="mock-hint">${t.h3}</div>
+        <div style="display:flex;align-items:baseline;gap:0.5rem;justify-content:center;margin:1.75rem 0;">
+          <div style="font-size:2.5rem;font-weight:500;letter-spacing:-0.04em;border-bottom:1.5px solid var(--blue);padding:0.25rem 0.5rem;min-width:5ch;text-align:center;">500</div>
+          <span style="color:var(--muted);font-size:1.125rem;">kr</span>
+        </div>
+        <div style="display:flex;gap:0.375rem;justify-content:center;flex-wrap:wrap;">
+          <span class="pill">300</span><span class="pill">400</span><span class="pill selected">500</span><span class="pill">600</span><span class="pill">800</span>
+        </div>
+        <div class="actions">
+          <button class="mock-btn mock-btn-secondary">${t.back}</button>
+          <button class="mock-btn mock-btn-primary">${t.viewPlan}</button>
+        </div>
+      </div>`;
+  }
+
+  function scene4(t) {
+    const rows = t.days.map((d, i) => `
+      <div class="plan-row">
+        <div class="plan-day">${d}</div>
+        <div class="plan-meals">
+          <div class="plan-meal-name">${t.meals[i][0]}</div>
+          <div class="plan-meal-desc">${t.meals[i][1]}</div>
+        </div>
+      </div>`).join('');
+    return `
+      <div class="mock-phase">
+        ${sceneHeader('✓', 'MADPLAN')}
+        <div class="plan-card">
+          <div class="plan-card-header">
+            <span>${t.planHead}</span>
+            <span class="plan-price">487 kr</span>
+          </div>
+          ${rows}
+          <div class="plan-footer">
+            <span>${t.ingredientCount}</span>
+            <span>${t.weekTotal}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="mock-btn mock-btn-secondary">${t.back}</button>
+          <button class="mock-btn mock-btn-primary">${t.sendCart}</button>
+        </div>
+      </div>`;
+  }
+
+  function scene5(t) {
+    const rows = t.items.map(([name, qty, price]) => `
+      <div class="receipt-line">
+        <div class="name">${name}</div>
+        <div class="qty">${qty}</div>
+        <div class="price">${price}</div>
+      </div>`).join('');
+    return `
+      <div class="mock-phase">
+        ${sceneHeader('✓', 'NEMLIG.COM')}
+        <div class="plan-card">
+          <div class="plan-card-header">
+            <span>${t.ingredientCount}</span>
+            <span class="plan-price">487 kr</span>
+          </div>
+          <div class="receipt">
+            ${rows}
+            <div class="receipt-line" style="color:var(--muted);font-style:italic;"><div class="name">${t.more}</div></div>
+            <div class="receipt-divider"></div>
+            <div class="receipt-line"><div class="name">${t.subtotal}</div><div class="price">487,00 kr</div></div>
+            <div class="receipt-line"><div class="name">${t.delivery}</div><div class="price" style="color:var(--blue);">${t.included}</div></div>
+            <div class="receipt-line receipt-total"><div class="name">${t.total}</div><div class="price">487,00 kr</div></div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="mock-btn mock-btn-secondary">${t.back}</button>
+          <button class="mock-btn mock-btn-primary">${t.orderCart}</button>
+        </div>
+      </div>`;
+  }
+
+  let mockTimer = null;
+  function startMock() {
+    clearTimeout(mockTimer);
+    const app = document.getElementById('mock-app');
+    const sceneLabel = document.getElementById('scene-label');
+    if (!app) return;
+    const t = TRANSLATIONS[getLang()];
+    const scenes = [
+      { label: t.scene1, html: scene1(t), progressIdx: 0 },
+      { label: t.scene2, html: scene2(t), progressIdx: 2 },
+      { label: t.scene3, html: scene3(t), progressIdx: 3 },
+      { label: t.scene4, html: scene4(t), progressIdx: 4 },
+      { label: t.scene5, html: scene5(t), progressIdx: 5 },
+    ];
+    let idx = 0;
+    function step() {
+      const s = scenes[idx];
+      sceneLabel.textContent = s.label;
+      app.innerHTML = s.html;
+      renderProgress(s.progressIdx, 5);
+      idx = (idx + 1) % scenes.length;
+      mockTimer = setTimeout(step, 3200);
+    }
+    step();
+  }
+
+  setLang(startLang);
 </script>
 </body>
 </html>
