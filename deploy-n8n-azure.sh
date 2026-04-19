@@ -101,6 +101,11 @@ if [ -n "$CUSTOM_DOMAIN" ]; then
     # Custom domain config: serve on custom domain, redirect Azure FQDN → custom domain
     cat > "$TMPDIR_CADDY/Caddyfile" <<EOF
 $CUSTOM_DOMAIN {
+    handle / {
+        root * /srv
+        rewrite * /index.html
+        file_server
+    }
     handle /meal-planner/$MEAL_PLANNER_TOKEN* {
         root * /srv
         rewrite * /meal-planner.html
@@ -121,6 +126,11 @@ EOF
 else
     cat > "$TMPDIR_CADDY/Caddyfile" <<EOF
 $ACI_FQDN {
+    handle / {
+        root * /srv
+        rewrite * /index.html
+        file_server
+    }
     handle /meal-planner/$MEAL_PLANNER_TOKEN* {
         root * /srv
         rewrite * /meal-planner.html
@@ -136,10 +146,12 @@ $ACI_FQDN {
 EOF
 fi
 cp meal-planner.html "$TMPDIR_CADDY/meal-planner.html"
+cp index.html "$TMPDIR_CADDY/index.html"
 cat > "$TMPDIR_CADDY/Dockerfile" <<'EOF'
 FROM caddy:2-alpine
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY meal-planner.html /srv/meal-planner.html
+COPY index.html /srv/index.html
 EOF
 az acr build \
     --registry "$ACR_NAME" \
