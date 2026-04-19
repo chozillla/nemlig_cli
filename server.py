@@ -556,7 +556,9 @@ class MealPlanHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path.startswith("/meal-planner"):
+        if self.path == "/" or self.path == "/index.html":
+            self.path = "/index.html"
+        elif self.path.startswith("/meal-planner"):
             self.path = "/meal-planner.html"
         super().do_GET()
 

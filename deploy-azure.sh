@@ -197,15 +197,35 @@ if [ -n "$CUSTOM_DOMAIN" ]; then
         --output none 2>/dev/null || echo "  DNS zone exists"
 
     echo "[8/$TOTAL_STEPS] Setting DNS records..."
+    # Remove stale A records before adding the new one
+    OLD_IPS=$(az network dns record-set a show -g "$RESOURCE_GROUP" -z "$CUSTOM_DOMAIN" -n "@" \
+        --query "ARecords[].ipv4Address" -o tsv 2>/dev/null || true)
+    for OLD_IP in $OLD_IPS; do
+        if [ "$OLD_IP" != "$IP" ]; then
+            echo "  Removing stale A record: $OLD_IP"
+            az network dns record-set a remove-record -g "$RESOURCE_GROUP" -z "$CUSTOM_DOMAIN" \
+                -n "@" -a "$OLD_IP" --output none 2>/dev/null || true
+        fi
+    done
     az network dns record-set a add-record --resource-group "$RESOURCE_GROUP" \
         --zone-name "$CUSTOM_DOMAIN" --record-set-name "@" --ipv4-address "$IP" \
         --output none 2>/dev/null || true
+    # Keep TTL low for faster propagation
+    az network dns record-set a update -g "$RESOURCE_GROUP" -z "$CUSTOM_DOMAIN" \
+        -n "@" --set ttl=60 --output none 2>/dev/null || true
     az network dns record-set cname set-record --resource-group "$RESOURCE_GROUP" \
         --zone-name "$CUSTOM_DOMAIN" --record-set-name "www" --cname "$CUSTOM_DOMAIN" \
         --output none 2>/dev/null || true
 
     NAMESERVERS=$(az network dns zone show --resource-group "$RESOURCE_GROUP" \
         --name "$CUSTOM_DOMAIN" --query "nameServers" -o tsv)
+
+    # Update /etc/hosts if it has an entry for this domain
+    if grep -q "$CUSTOM_DOMAIN" /etc/hosts 2>/dev/null; then
+        echo "  Updating /etc/hosts..."
+        sudo sed -i '' "s/.*$CUSTOM_DOMAIN/$IP $CUSTOM_DOMAIN/" /etc/hosts 2>/dev/null || \
+            echo "  NOTE: Run 'sudo sed -i \"\" \"s/.*$CUSTOM_DOMAIN/$IP $CUSTOM_DOMAIN/\" /etc/hosts' to update /etc/hosts"
+    fi
 fi
 
 echo ""
