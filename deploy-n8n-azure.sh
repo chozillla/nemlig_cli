@@ -106,13 +106,10 @@ $CUSTOM_DOMAIN {
         rewrite * /index.html
         file_server
     }
-    handle /meal-planner/$MEAL_PLANNER_TOKEN* {
+    handle /meal-planner* {
         root * /srv
         rewrite * /meal-planner.html
         file_server
-    }
-    handle /meal-planner* {
-        respond "Not found" 404
     }
     handle {
         reverse_proxy localhost:5678
@@ -131,13 +128,10 @@ $ACI_FQDN {
         rewrite * /index.html
         file_server
     }
-    handle /meal-planner/$MEAL_PLANNER_TOKEN* {
+    handle /meal-planner* {
         root * /srv
         rewrite * /meal-planner.html
         file_server
-    }
-    handle /meal-planner* {
-        respond "Not found" 404
     }
     handle {
         reverse_proxy localhost:5678

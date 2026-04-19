@@ -790,31 +790,100 @@ async function doSignInWithProvider(provider) {
   if (error) console.error('OAuth error:', error);
 }
 
-async function doMagicLink() {
+async function doEmailAuth() {
+  if (!sb) return;
+  const email = document.getElementById('auth-email')?.value?.trim();
+  const password = document.getElementById('auth-password')?.value;
+  const errEl = document.getElementById('auth-error');
+  const btn = document.getElementById('auth-submit-btn');
+  const isSignin = getAuthMode() === 'signin';
+
+  if (!email) { errEl.textContent = 'Indtast din email / Enter your email.'; errEl.classList.add('show'); return; }
+  if (!password || password.length < 6) { errEl.textContent = 'Adgangskoden skal være mindst 6 tegn / Password must be at least 6 characters.'; errEl.classList.add('show'); return; }
+
+  errEl.classList.remove('show');
+  errEl.style.color = '';
+  btn.disabled = true;
+  btn.textContent = isSignin ? 'Logger ind...' : 'Opretter konto...';
+
+  if (isSignin) {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      errEl.textContent = error.message;
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'Log ind';
+      return;
+    }
+  } else {
+    const { error } = await sb.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.href.split('#')[0].split('?')[0] }
+    });
+    if (error) {
+      errEl.textContent = error.message;
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'Opret konto';
+      return;
+    }
+    errEl.textContent = 'Tjek din inbox for at bekræfte din email! / Check your inbox to confirm your email!';
+    errEl.classList.add('show');
+    errEl.style.color = 'var(--green)';
+    btn.textContent = 'Email sendt!';
+  }
+}
+
+async function doResetPassword() {
   if (!sb) return;
   const email = document.getElementById('auth-email')?.value?.trim();
   const errEl = document.getElementById('auth-error');
-  const btn = document.getElementById('magic-link-btn');
-  if (!email) { errEl.textContent = 'Enter your email address.'; errEl.classList.add('show'); return; }
+  const btn = document.getElementById('auth-submit-btn');
+  if (!email) { errEl.textContent = 'Indtast din email først / Enter your email first.'; errEl.classList.add('show'); return; }
 
+  errEl.classList.remove('show');
+  errEl.style.color = '';
   btn.disabled = true;
-  btn.textContent = 'Sending...';
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.href.split('#')[0].split('?')[0] }
+  btn.textContent = 'Sender...';
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.href.split('#')[0].split('?')[0] + '?mode=reset'
   });
   if (error) {
     errEl.textContent = error.message;
     errEl.classList.add('show');
     btn.disabled = false;
-    btn.textContent = 'Send magic link';
+    btn.textContent = 'Nulstil adgangskode / Reset password';
     return;
   }
-  // Show success state
-  errEl.textContent = 'Check your inbox! Click the link in the email to sign in.';
+  errEl.textContent = 'Tjek din inbox for et link til at nulstille din adgangskode. / Check your inbox for a password reset link.';
   errEl.classList.add('show');
   errEl.style.color = 'var(--green)';
-  btn.textContent = 'Email sent!';
+  btn.textContent = 'Email sendt!';
+}
+
+async function doUpdatePassword() {
+  if (!sb) return;
+  const password = document.getElementById('auth-password')?.value;
+  const errEl = document.getElementById('auth-error');
+  const btn = document.getElementById('auth-submit-btn');
+  if (!password || password.length < 6) { errEl.textContent = 'Adgangskoden skal være mindst 6 tegn / Password must be at least 6 characters.'; errEl.classList.add('show'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Gemmer...';
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'Gem ny adgangskode / Save new password';
+    return;
+  }
+  errEl.textContent = 'Adgangskode opdateret! / Password updated!';
+  errEl.classList.add('show');
+  errEl.style.color = 'var(--green)';
+  btn.textContent = 'Opdateret!';
+  setTimeout(() => { window.location.href = window.location.pathname + '?mode=signin'; }, 1500);
 }
 
 async function doSignOut() {
@@ -891,11 +960,51 @@ function getAuthMode() {
 }
 
 function renderAuth() {
-  const isSignin = getAuthMode() === 'signin';
+  const mode = getAuthMode();
+  const isSignin = mode === 'signin';
+  const isForgot = mode === 'forgot';
+  const isReset = mode === 'reset';
+
+  if (isReset) {
+    $app.innerHTML = `
+      <div class="auth-view">
+        <div class="auth-title">Ny adgangskode / New password</div>
+        <div class="auth-subtitle">Vælg en ny adgangskode til din konto. / Choose a new password for your account.</div>
+        <div id="auth-error" class="auth-error"></div>
+        <div class="auth-input">
+          <label>Ny adgangskode / New password (min. 6 tegn)</label>
+          <input type="password" id="auth-password" placeholder="••••••••" onkeydown="if(event.key==='Enter'){event.preventDefault();doUpdatePassword();}">
+        </div>
+        <button id="auth-submit-btn" class="btn btn-primary" style="width:100%" onclick="doUpdatePassword()">Gem ny adgangskode / Save new password</button>
+        <div class="auth-link" style="margin-top:0.75rem"><a href="/meal-planner?mode=signin">Tilbage til log ind / Back to sign in</a></div>
+      </div>
+    `;
+    $bar.innerHTML = '';
+    return;
+  }
+
+  if (isForgot) {
+    $app.innerHTML = `
+      <div class="auth-view">
+        <div class="auth-title">Glemt adgangskode / Forgot password</div>
+        <div class="auth-subtitle">Indtast din email, så sender vi et link til at nulstille din adgangskode. / Enter your email and we'll send a reset link.</div>
+        <div id="auth-error" class="auth-error"></div>
+        <div class="auth-input">
+          <label>Email</label>
+          <input type="email" id="auth-email" placeholder="dig@eksempel.dk" onkeydown="if(event.key==='Enter'){event.preventDefault();doResetPassword();}">
+        </div>
+        <button id="auth-submit-btn" class="btn btn-primary" style="width:100%" onclick="doResetPassword()">Nulstil adgangskode / Reset password</button>
+        <div class="auth-link" style="margin-top:0.75rem"><a href="/meal-planner?mode=signin">Tilbage til log ind / Back to sign in</a></div>
+      </div>
+    `;
+    $bar.innerHTML = '';
+    return;
+  }
+
   const title = isSignin ? 'Velkommen tilbage' : 'Kom i gang med Ugemad';
   const subtitle = isSignin
-    ? 'Log ind med din email — vi sender et link, ingen adgangskode.'
-    : 'Opret din konto på under et minut — ingen adgangskode.';
+    ? 'Log ind med din email og adgangskode.'
+    : 'Opret din konto på under et minut.';
   const btn = isSignin ? 'Log ind' : 'Opret konto';
   const footer = isSignin
     ? '<span>Ny bruger? <a href="/meal-planner?mode=signup">Opret konto</a></span>'
@@ -912,9 +1021,14 @@ function renderAuth() {
       <div id="auth-error" class="auth-error"></div>
       <div class="auth-input">
         <label>Email</label>
-        <input type="email" id="auth-email" placeholder="dig@eksempel.dk" onkeydown="if(event.key==='Enter'){event.preventDefault();doMagicLink();}">
+        <input type="email" id="auth-email" placeholder="dig@eksempel.dk" onkeydown="if(event.key==='Enter'){document.getElementById('auth-password').focus();}">
       </div>
-      <button id="magic-link-btn" class="btn btn-primary" style="width:100%" onclick="doMagicLink()">${btn}</button>
+      <div class="auth-input">
+        <label>${isSignin ? 'Adgangskode' : 'Vælg adgangskode (min. 6 tegn)'}</label>
+        <input type="password" id="auth-password" placeholder="••••••••" onkeydown="if(event.key==='Enter'){event.preventDefault();doEmailAuth();}">
+      </div>
+      <button id="auth-submit-btn" class="btn btn-primary" style="width:100%" onclick="doEmailAuth()">${btn}</button>
+      ${isSignin ? '<div class="auth-link" style="margin-top:0.5rem"><a href="/meal-planner?mode=forgot">Glemt adgangskode? / Forgot password?</a></div>' : ''}
       <div class="auth-link" style="margin-top:0.75rem">${footer}</div>
     </div>
   `;
