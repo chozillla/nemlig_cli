@@ -2175,6 +2175,14 @@ MEAL_PLAN_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "sync_to_basket",
+            "description": "Push every item from the local grocery list into the user's actual nemlig.com basket. Call this AFTER the user approves the plan, so their cart on nemlig.com is ready to check out. No parameters — it syncs the current grocery list as-is.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "export_meal_plan",
             "description": "After the receipt is shown, save the full meal plan + recipes + shopping list as a styled HTML file and open it in the user's browser (they can print to PDF from there). Pass the complete week's meals with bilingual recipe steps. The shopping list is read automatically from the grocery list. Call this LAST, after add_to_grocery_list calls are done.",
             "parameters": {
@@ -2363,6 +2371,30 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
             if len(products) == limit:
                 hint = f"\n(Showing {limit} results — increase limit to see more)"
             return header + "\n".join(results) + hint
+
+        elif tool_name == "sync_to_basket":
+            data = load_grocery_list()
+            items = data.get("items", [])
+            if not items:
+                return "Grocery list is empty — nothing to sync."
+            ok, fail = [], []
+            for item in items:
+                pid = item["product_id"]
+                qty = item.get("quantity", 1)
+                try:
+                    add_to_basket(auth, pid, qty)
+                    ok.append(f"{item.get('name','?')} x{qty}")
+                except Exception as e:
+                    fail.append(f"{item.get('name','?')} (id {pid}): {e}")
+            lines = [f"Synced {len(ok)}/{len(items)} items to your nemlig.com basket."]
+            if ok:
+                lines.append("Added:")
+                lines.extend(f"  ✓ {x}" for x in ok)
+            if fail:
+                lines.append("Failed:")
+                lines.extend(f"  ✗ {x}" for x in fail)
+            lines.append("Open https://www.nemlig.com/basket to review and check out.")
+            return "\n".join(lines)
 
         elif tool_name == "export_meal_plan":
             html_path = render_meal_plan_html(
@@ -3049,7 +3081,11 @@ Once all items are added, present a single clean summary with:
 
 3. Ask: "Approve this plan? (yes/no)" — wait for the user to confirm.
 
-After the user approves, immediately call export_meal_plan with the full week's meals so they get a printable HTML/PDF version. Each meal entry must include: day, slot (breakfast/lunch/dinner/snack), name, description, ingredients (with quantities), steps_dk and steps_en (mirrored bilingual recipe), and macros if you can estimate them. Then send a one-line confirmation message naming the file path returned by the tool.
+After the user approves, do BOTH of the following in the same turn (you can call multiple tools in parallel):
+1. Call sync_to_basket — this pushes every item from the grocery list into the user's actual nemlig.com basket so they can check out. This is REQUIRED on approval; the user expects their cart to be filled.
+2. Call export_meal_plan with the full week's meals so they get a printable HTML/PDF version. Each meal entry must include: day, slot (breakfast/lunch/dinner/snack), name, description, ingredients (with quantities), steps_dk and steps_en (mirrored bilingual recipe), and macros if you can estimate them.
+
+Then send a short confirmation message that includes (a) the basket sync result and (b) the file path returned by export_meal_plan.
 
 If the user says no or wants changes:
 - NEVER use clear_grocery_list. Keep the existing list intact.
