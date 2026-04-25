@@ -168,28 +168,64 @@ def _parse_kcal(s):
     return _parse_eu_number(s)
 
 
-def extract_nutrition(product_detail):
-    """Return dict with per-100g kcal/protein_g/fat_g/carbs_g, or None."""
-    facts = (product_detail.get("Declarations") or {}).get("NutritionFacts") or []
-    if not facts:
-        return None
+def _parse_declaration_label(label_html):
+    """Parse Nemlig's HTML nutrition table from DeclarationLabel."""
+    if not label_html:
+        return {}
+    rows = re.findall(
+        r"<tr[^>]*>\s*<td[^>]*>(.*?)</td>\s*<td[^>]*>(.*?)</td>\s*</tr>",
+        label_html, re.IGNORECASE | re.DOTALL,
+    )
     out = {}
-    for f in facts:
-        name = (f.get("Name") or "").lower()
-        val = f.get("Value") or ""
+    for raw_name, raw_val in rows:
+        name = re.sub(r"<[^>]+>", "", raw_name).strip().lower()
+        name = (name.replace("&#230;", "æ").replace("&aelig;", "æ")
+                    .replace("&#248;", "ø").replace("&oslash;", "ø")
+                    .replace("&#229;", "å").replace("&aring;", "å"))
+        val = re.sub(r"<[^>]+>", "", raw_val).strip()
+        if name.startswith("heraf"):
+            continue
         if "energi" in name or "energy" in name:
             kc = _parse_kcal(val)
-            if kc is not None:
+            if kc is not None and "kcal" not in out:
                 out["kcal"] = kc
-        elif "protein" in name:
+        elif "protein" in name and "protein_g" not in out:
             n = _parse_eu_number(val)
             if n is not None:
                 out["protein_g"] = n
-        elif "fedt" in name or "fat" in name:
+        elif ("fedt" in name or "fat" in name) and "fat_g" not in out:
             n = _parse_eu_number(val)
             if n is not None:
                 out["fat_g"] = n
-        elif "kulhydrat" in name or "carb" in name:
+        elif ("kulhydrat" in name or "carb" in name) and "carbs_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["carbs_g"] = n
+    return out
+
+
+def extract_nutrition(product_detail):
+    """Return per-100g {kcal, protein_g, fat_g, carbs_g} or None."""
+    out = _parse_declaration_label(product_detail.get("DeclarationLabel") or "")
+
+    # Fallback: structured NutritionFacts array (rare but documented)
+    facts = (product_detail.get("Declarations") or {}).get("NutritionFacts") or []
+    for f in facts:
+        name = (f.get("Name") or "").lower()
+        val = f.get("Value") or ""
+        if "energi" in name and "kcal" not in out:
+            kc = _parse_kcal(val)
+            if kc is not None:
+                out["kcal"] = kc
+        elif "protein" in name and "protein_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["protein_g"] = n
+        elif ("fedt" in name or "fat" in name) and "fat_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["fat_g"] = n
+        elif ("kulhydrat" in name or "carb" in name) and "carbs_g" not in out:
             n = _parse_eu_number(val)
             if n is not None:
                 out["carbs_g"] = n

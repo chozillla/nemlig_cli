@@ -1089,6 +1089,123 @@ def strip_html_tags(html: str) -> str:
     return re.sub(r"<[^>]+>", "", html).strip()
 
 
+# ── Nutrition / Macros ────────────────────────────────────────
+
+def _parse_eu_number(s: str):
+    """Parse the first number in a string, accepting comma decimals (e.g. '1,5 g')."""
+    m = re.search(r"(\d+(?:[,.]\d+)?)", s or "")
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _parse_kcal(s: str):
+    """Extract kcal from values like '276 kJ / 65 kcal' or '65 kcal'."""
+    m = re.search(r"(\d+(?:[,.]\d+)?)\s*kcal", s or "", re.IGNORECASE)
+    if m:
+        try:
+            return float(m.group(1).replace(",", "."))
+        except ValueError:
+            return None
+    return _parse_eu_number(s)
+
+
+def _parse_declaration_label(label_html: str) -> dict:
+    """Parse the HTML nutrition table from a product's DeclarationLabel.
+
+    Real Nemlig products carry nutrition as an HTML <table> inside
+    DeclarationLabel (e.g. row "Protein" / "3.6 g"). The structured
+    Declarations.NutritionFacts array shown in the API docs is rare in
+    practice, so this is the primary path.
+    """
+    if not label_html:
+        return {}
+    rows = re.findall(
+        r"<tr[^>]*>\s*<td[^>]*>(.*?)</td>\s*<td[^>]*>(.*?)</td>\s*</tr>",
+        label_html, re.IGNORECASE | re.DOTALL,
+    )
+    out: dict = {}
+    for raw_name, raw_val in rows:
+        name = re.sub(r"<[^>]+>", "", raw_name).strip().lower()
+        # Decode common HTML entities so "m&#230;ttede" / "&aelig;" → "mættede" etc.
+        name = (name.replace("&#230;", "æ").replace("&aelig;", "æ")
+                    .replace("&#248;", "ø").replace("&oslash;", "ø")
+                    .replace("&#229;", "å").replace("&aring;", "å"))
+        val = re.sub(r"<[^>]+>", "", raw_val).strip()
+        # Skip "heraf X" sub-rows (saturated fat, sugars) — only top-level macros
+        if name.startswith("heraf"):
+            continue
+        if "energi" in name or "energy" in name:
+            kc = _parse_kcal(val)
+            if kc is not None and "kcal" not in out:
+                out["kcal"] = kc
+        elif "protein" in name and "protein_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["protein_g"] = n
+        elif ("fedt" in name or "fat" in name) and "fat_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["fat_g"] = n
+        elif ("kulhydrat" in name or "carb" in name) and "carbs_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["carbs_g"] = n
+    return out
+
+
+def extract_nutrition(product: dict) -> dict | None:
+    """Return per-100g {kcal, protein_g, fat_g, carbs_g} for a product detail.
+
+    Tries the HTML DeclarationLabel first (where real data lives), then falls
+    back to the structured NutritionFacts array if present. Returns None when
+    no nutrition data is available.
+    """
+    out = _parse_declaration_label(product.get("DeclarationLabel") or "")
+
+    # Fallback: structured NutritionFacts array (rare but documented)
+    facts = (product.get("Declarations") or {}).get("NutritionFacts") or []
+    for f in facts:
+        name = (f.get("Name") or "").lower()
+        val = f.get("Value") or ""
+        if "energi" in name and "kcal" not in out:
+            kc = _parse_kcal(val)
+            if kc is not None:
+                out["kcal"] = kc
+        elif "protein" in name and "protein_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["protein_g"] = n
+        elif ("fedt" in name or "fat" in name) and "fat_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["fat_g"] = n
+        elif ("kulhydrat" in name or "carb" in name) and "carbs_g" not in out:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["carbs_g"] = n
+    return out or None
+
+
+def format_nutrition(nutrition: dict | None) -> str:
+    """Render a nutrition dict as a readable block. Empty string if no data."""
+    if not nutrition:
+        return ""
+    lines = ["Nutrition (per 100g):"]
+    if "kcal" in nutrition:
+        lines.append(f"  Energy:   {nutrition['kcal']:.0f} kcal")
+    if "protein_g" in nutrition:
+        lines.append(f"  Protein:  {nutrition['protein_g']:.1f} g")
+    if "carbs_g" in nutrition:
+        lines.append(f"  Carbs:    {nutrition['carbs_g']:.1f} g")
+    if "fat_g" in nutrition:
+        lines.append(f"  Fat:      {nutrition['fat_g']:.1f} g")
+    return "\n".join(lines)
+
+
 def wrap_text(text: str, width: int = 80, indent: str = "  ") -> list[str]:
     """Wrap text to specified width with indentation."""
     lines = []
@@ -1348,6 +1465,12 @@ def format_product_details(product: dict) -> str:
         lines.append("")
         lines.append(f"Labels:      {', '.join(labels)}")
 
+    # Nutrition / Macros
+    nutrition = extract_nutrition(product)
+    if nutrition:
+        lines.append("")
+        lines.append(format_nutrition(nutrition))
+
     # Product description (HTML text, strip tags for CLI)
     text = product.get("Text", "")
     if text:
@@ -1382,6 +1505,168 @@ def cmd_search(auth: AuthTokens, args: argparse.Namespace) -> int:
     for product in products:
         print(format_product(product))
 
+    return 0
+
+
+def _fetch_product_by_url(auth: "AuthTokens", product_url: str) -> dict:
+    """Fetch a product detail by its URL slug (no redundant search call)."""
+    page_settings = get_page_settings(auth)
+    headers = get_common_headers()
+    headers["Authorization"] = f"Bearer {auth.bearer_token}"
+    headers["X-XSRF-TOKEN"] = auth.xsrf_token
+    params = {"GetAsJson": "1", "t": page_settings["timeslotUtc"], "d": "1"}
+    resp = auth.session.get(f"{BASE_URL}/{product_url}", headers=headers, params=params)
+    resp.raise_for_status()
+    for item in resp.json().get("content", []):
+        if item.get("TemplateName") == "productdetailspot":
+            return item
+    return {}
+
+
+def cmd_macros(auth: "AuthTokens", args: argparse.Namespace) -> int:
+    """Search products and print a per-100g macros table for the top results."""
+    query = args.query
+    limit = max(1, min(args.limit, 10))
+
+    print(f"Fetching macros for '{query}' (top {limit})...", file=sys.stderr)
+    products = search_products(auth, query, limit)
+    if not products:
+        print(f"No products found for '{query}'")
+        return 1
+
+    print(f"\nMacros (per 100g) for '{query}':\n")
+    print(f"  {'ID':<10} {'Product':<38} {'Price':>8}  {'kcal':>5} {'P':>5} {'C':>5} {'F':>5}")
+    print("  " + "-" * 86)
+
+    def _fmt(n, d):
+        v = n.get(d)
+        if isinstance(v, (int, float)):
+            return f"{v:.0f}" if d == "kcal" else f"{v:.1f}"
+        return "—"
+
+    for p in products:
+        pid = p.get("Id", "")
+        name = (p.get("Name") or "")[:36]
+        price = p.get("Price", 0)
+        url = p.get("Url", "")
+        try:
+            detail = _fetch_product_by_url(auth, url) if url else {}
+            n = extract_nutrition(detail) or {}
+        except Exception:
+            n = {}
+        print(f"  {pid:<10} {name:<38} {price:>7.2f}   "
+              f"{_fmt(n,'kcal'):>5} {_fmt(n,'protein_g'):>5} "
+              f"{_fmt(n,'carbs_g'):>5} {_fmt(n,'fat_g'):>5}")
+    print()
+    print("  Use `just product <ID>` for the full nutrition label.")
+    return 0
+
+
+def search_recipes(auth: "AuthTokens", query: str, count: int = 5) -> list:
+    """Hit the search API with recipeCount > 0 and return only the Recipes array."""
+    page_settings = get_page_settings(auth)
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": f"Bearer {auth.bearer_token}",
+        "X-Correlation-Id": str(uuid.uuid4()),
+        "Referer": f"{BASE_URL}/",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+    }
+    params = {
+        "query": query,
+        "take": 0,
+        "skip": 0,
+        "recipeCount": count,
+        "timestamp": page_settings["timestamp"],
+        "timeslotUtc": page_settings["timeslotUtc"],
+        "deliveryZoneId": page_settings["deliveryZoneId"],
+    }
+    if page_settings.get("userId"):
+        params["includeFavorites"] = page_settings["userId"]
+
+    resp = auth.session.get(f"{SEARCH_API_URL}/search", headers=headers, params=params)
+    if resp.status_code == 401:
+        auth.refresh()
+        headers["Authorization"] = f"Bearer {auth.bearer_token}"
+        resp = auth.session.get(f"{SEARCH_API_URL}/search", headers=headers, params=params)
+    resp.raise_for_status()
+    return resp.json().get("Recipes") or []
+
+
+def format_recipe(r: dict) -> str:
+    """Render a recipe dict as a 2-line block."""
+    name = r.get("Name", "?")
+    extras = []
+    time = r.get("TotalTime")
+    if time:
+        extras.append(time)
+    persons = r.get("NumberOfPersons")
+    if isinstance(persons, int) and persons > 0:
+        extras.append(f"{persons} {'person' if persons == 1 else 'personer'}")
+    suffix = f"  ({', '.join(extras)})" if extras else ""
+    url = r.get("Url", "")
+    if url and not url.startswith("http"):
+        url = BASE_URL + url
+    line2 = f"    {url}" if url else ""
+    return f"  • {name}{suffix}\n{line2}" if line2 else f"  • {name}{suffix}"
+
+
+def cmd_recipes(auth: "AuthTokens", args: argparse.Namespace) -> int:
+    """Search nemlig.com recipes for a term and print suggestions."""
+    query = args.query
+    limit = max(1, min(args.limit, 20))
+
+    print(f"Searching recipes for '{query}'...", file=sys.stderr)
+    recipes = search_recipes(auth, query, count=limit)
+    if not recipes:
+        print(f"No recipes found for '{query}'.")
+        return 1
+
+    print(f"\nFound {len(recipes)} recipes for '{query}':\n")
+    for r in recipes:
+        print(format_recipe(r))
+        print()
+    return 0
+
+
+def cmd_list_recipes(auth: "AuthTokens", args: argparse.Namespace) -> int:
+    """Suggest recipes that use items currently in the grocery list."""
+    data = load_grocery_list()
+    items = data.get("items", [])
+    if not items:
+        print("Your grocery list is empty. Add items first with `just list-add` or `just plan`.")
+        return 1
+
+    limit = max(1, min(args.limit, 20))
+    per_item = 3
+    print(f"Looking up recipes for {len(items)} list items...", file=sys.stderr)
+
+    by_url: dict[str, dict] = {}
+    for item in items:
+        name = item.get("name", "").strip()
+        if not name:
+            continue
+        try:
+            recipes = search_recipes(auth, name, count=per_item)
+        except Exception:
+            continue
+        for r in recipes:
+            url = r.get("Url")
+            if not url:
+                continue
+            entry = by_url.setdefault(url, {"recipe": r, "matches": set()})
+            entry["matches"].add(name)
+
+    if not by_url:
+        print("No matching recipes found from items in your list.")
+        return 0
+
+    matches = sorted(by_url.values(), key=lambda x: -len(x["matches"]))[:limit]
+    print(f"\nTop {len(matches)} recipes using items from your list:\n")
+    for entry in matches:
+        print(format_recipe(entry["recipe"]))
+        print(f"    Uses: {', '.join(sorted(entry['matches']))}")
+        print()
     return 0
 
 
@@ -1719,6 +2004,24 @@ MEAL_PLAN_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "compare_macros",
+            "description": "Fetch per-100g nutrition (kcal, protein, carbs, fat) for a list of product IDs and rank by protein-per-krone. Use this for PROTEIN ingredients (meat, fish, eggs, tofu, dairy) to pick the most macro-efficient option. Pass 2-5 candidate IDs from search_products results.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of product IDs to compare (max 5)"
+                    }
+                },
+                "required": ["product_ids"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "add_to_grocery_list",
             "description": "Add a product to the grocery list by its product ID. Use search_products first to find the product ID.",
             "parameters": {
@@ -1844,6 +2147,55 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
             if len(products) == limit:
                 hint = f"\n(Showing {limit} results — increase limit to see more)"
             return header + "\n".join(results) + hint
+
+        elif tool_name == "compare_macros":
+            ids = [str(p) for p in tool_input.get("product_ids", [])][:5]
+            if not ids:
+                return "Error: provide 1-5 product_ids."
+            rows = []
+            for pid in ids:
+                try:
+                    detail = get_product_details(auth, pid)
+                except ProductNotFoundError as e:
+                    rows.append({"id": pid, "error": str(e)})
+                    continue
+                nut = extract_nutrition(detail) or {}
+                price = detail.get("Price", 0) or 0
+                protein = nut.get("protein_g")
+                pkr = (protein / price) if (protein and price) else None
+                rows.append({
+                    "id": pid,
+                    "name": detail.get("Name", ""),
+                    "price": price,
+                    "kcal": nut.get("kcal"),
+                    "protein_g": protein,
+                    "carbs_g": nut.get("carbs_g"),
+                    "fat_g": nut.get("fat_g"),
+                    "protein_per_kr": round(pkr, 3) if pkr else None,
+                })
+            ranked = sorted(
+                [r for r in rows if r.get("protein_per_kr") is not None],
+                key=lambda r: r["protein_per_kr"], reverse=True,
+            )
+            no_data = [r for r in rows if "error" in r or r.get("protein_per_kr") is None]
+            def _fmt(v, digits=1):
+                return f"{v:.{digits}f}" if isinstance(v, (int, float)) else "?"
+            lines = ["Macros per 100g (ranked by protein-per-krone, best first):"]
+            for r in ranked:
+                lines.append(
+                    f"- [{r['id']}] {r['name']} | {r['price']:.2f} kr | "
+                    f"{_fmt(r['kcal'], 0)} kcal · "
+                    f"P {_fmt(r['protein_g'])}g · C {_fmt(r['carbs_g'])}g · F {_fmt(r['fat_g'])}g | "
+                    f"protein/kr: {r['protein_per_kr']}"
+                )
+            for r in no_data:
+                if "error" in r:
+                    lines.append(f"- [{r['id']}] (no data: {r['error']})")
+                else:
+                    lines.append(f"- [{r['id']}] {r.get('name','')} | {r.get('price',0):.2f} kr | (no nutrition data)")
+            if ranked:
+                lines.append(f"\nRecommendation: prefer ID {ranked[0]['id']} for highest protein density.")
+            return "\n".join(lines)
 
         elif tool_name == "add_to_grocery_list":
             product_id = str(tool_input["product_id"])
@@ -2445,7 +2797,8 @@ The user's first message contains structured survey data with their diet, restri
 STEP 2 — SEARCH & BUILD
 Based on the user's requirements, decide on meals matching the user's weekly schedule (only plan the specific meals listed for each day). Then IMMEDIATELY:
 - Use search_products to find each ingredient on nemlig.com (search in Danish: "kyllingebryst", "hakket oksekød", "pasta", "ris", "æg", etc.)
-- Pick the best-priced available products
+- For PROTEIN ingredients (meat, fish, eggs, tofu, dairy with high protein like skyr/cottage cheese): pick 2-4 reasonable candidates from the search results and call compare_macros with their IDs. The tool returns per-100g macros and ranks by protein-per-krone — add the top-ranked product unless something else (organic, brand, package size) clearly outweighs density.
+- For non-protein ingredients (vegetables, grains, condiments, fruits): just pick the best-priced available product, no need for compare_macros.
 - Use add_to_grocery_list to add them
 - Do this for ALL ingredients before responding
 - Do NOT list meals or recipes in text yet — just silently search and add everything
@@ -3628,6 +3981,20 @@ Examples:
     details_parser = subparsers.add_parser("details", help="Show detailed product info")
     details_parser.add_argument("product_id", help="Product ID to view")
 
+    # Macros command — search + nutrition table
+    macros_parser = subparsers.add_parser("macros", help="🥩 Show per-100g macros for top search results")
+    macros_parser.add_argument("query", help="Search query")
+    macros_parser.add_argument("-l", "--limit", type=int, default=5, help="Max results, capped at 10 (default: 5)")
+
+    # Recipes command — nemlig.com recipe suggestions for a search term
+    recipes_parser = subparsers.add_parser("recipes", help="🍳 Show recipes from nemlig.com for a search term")
+    recipes_parser.add_argument("query", help="Search query (ingredient, dish, etc.)")
+    recipes_parser.add_argument("-l", "--limit", type=int, default=5, help="Max recipes (default: 5)")
+
+    # List recipes command — recipes that use items from the grocery list
+    list_recipes_parser = subparsers.add_parser("list-recipes", help="🍽️  Suggest recipes using items from your list")
+    list_recipes_parser.add_argument("-l", "--limit", type=int, default=8, help="Max recipes (default: 8)")
+
     # Basket command
     subparsers.add_parser("basket", help="Show current basket")
 
@@ -3765,6 +4132,12 @@ Examples:
             return cmd_search(auth, args)
         elif args.command == "details":
             return cmd_details(auth, args)
+        elif args.command == "macros":
+            return cmd_macros(auth, args)
+        elif args.command == "recipes":
+            return cmd_recipes(auth, args)
+        elif args.command == "list-recipes":
+            return cmd_list_recipes(auth, args)
         elif args.command == "basket":
             return cmd_basket(auth, args)
         elif args.command == "add":
