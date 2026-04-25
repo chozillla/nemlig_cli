@@ -3079,9 +3079,11 @@ Once all items are added, present a single clean summary with:
      BUDGET                           500.00 kr
      REMAINING                         11.76 kr
 
-3. Ask: "Approve this plan? Type **yes** to sync your nemlig.com basket and export a printable PDF, or describe changes you want." — wait for the user to respond.
+3. Ask: "Approve this plan? Type **yes** to generate the printable recipe PDF, or describe what to change." — wait for the user to respond.
 
-The harness handles the approval flow deterministically: when the user types yes/y/approve, the basket is synced automatically (you do NOT need to call sync_to_basket), and the harness will then prompt you to call export_meal_plan with the full week's meals. Each meal entry must include: day, slot (breakfast/lunch/dinner/snack), name, description, ingredients (with quantities), steps_dk and steps_en (mirrored bilingual recipe), and macros if you can estimate them.
+The harness drives the rest of the flow deterministically:
+- When the user approves, the harness will prompt you to call export_meal_plan with the full week's meals. Each meal entry must include: day, slot (breakfast/lunch/dinner/snack), name, description, ingredients (with quantities), steps_dk and steps_en (mirrored bilingual recipe), and macros if you can estimate them.
+- After the export, the harness asks the user separately whether to push the items into their nemlig.com basket. You do NOT need to call sync_to_basket — the harness handles the cart sync itself once the user confirms.
 
 If the user says no or wants changes:
 - NEVER use clear_grocery_list. Keep the existing list intact.
@@ -3289,6 +3291,8 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False, use_template: bool = Tru
 
     # ── Chat loop for follow-up adjustments ─────────────────────
     is_first_free_text = cli and first_message is None
+    awaiting_basket_confirm = False  # True after recipe export, before basket sync
+
     while True:
         try:
             user_input = input("  you> ").strip()
@@ -3307,20 +3311,38 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False, use_template: bool = Tru
         # Sync-only shortcut: just push to basket, no LLM round-trip
         if lower in _SYNC_ONLY:
             _do_sync_basket()
+            awaiting_basket_confirm = False
             continue
 
-        # Approval shortcut: sync deterministically, then ask the LLM to export
+        # ── Stage 2: user is confirming the basket sync ───────────
+        if awaiting_basket_confirm:
+            if lower in _APPROVE:
+                _do_sync_basket()
+                awaiting_basket_confirm = False
+                print("  (Type 'exit' to quit, or keep chatting to adjust the plan.)\n")
+                continue
+            if lower in {"n", "no", "nope", "skip", "later"}:
+                awaiting_basket_confirm = False
+                print("\n  ✓ Basket left untouched. Open the HTML to read the recipes; "
+                      "type 'sync' later to push the items, or 'exit' to quit.\n")
+                continue
+            # Anything else: drop the basket-confirm state and treat as a regular adjustment
+            awaiting_basket_confirm = False
+
+        # ── Stage 1: user is approving the plan → export recipe HTML ─
         if lower in _APPROVE:
-            synced = _do_sync_basket()
-            bridge = ("The user just approved the plan. I have already synced the grocery list "
-                      "to their nemlig.com basket on their behalf. "
-                      if synced else "The user approved but the grocery list was empty. ")
-            bridge += ("Now call export_meal_plan with the full week's meals "
-                       "(every day, slot, name, ingredients, steps_dk, steps_en, macros) "
-                       "so they get a printable HTML/PDF. Do NOT call sync_to_basket — it's done. "
-                       "After the export, send a one-line confirmation with the file path.")
+            bridge = ("The user just approved the plan. Call export_meal_plan now with "
+                      "the full week's meals (every day, slot, name, ingredients, steps_dk, "
+                      "steps_en, macros) so they get a printable HTML/PDF to read. "
+                      "Do NOT call sync_to_basket — the harness will ask the user "
+                      "separately whether to push items into the cart. After the export, "
+                      "send a one-line confirmation with the file path.")
             _run_turn(bridge)
-            print("  (Type 'exit' to quit, or keep chatting to adjust the plan.)\n")
+            awaiting_basket_confirm = True
+            print("  ─────────────────────────────────────────────────────")
+            print("  📖 Read the recipes in the HTML, then come back here.")
+            print("  🛒 Add these items to your nemlig.com basket? (yes/no)")
+            print("  ─────────────────────────────────────────────────────\n")
             continue
 
         if is_first_free_text and template_active:
