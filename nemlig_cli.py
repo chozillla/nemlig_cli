@@ -2015,24 +2015,38 @@ _DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Su
 _MEALS = ["Breakfast", "Lunch", "Dinner"]
 
 
-def _pick_one(label: str, options: list[str], default: int = 1) -> str:
-    """Print numbered options, return the selected string."""
+# Sentinel returned by survey helpers when the user wants to go back one step.
+_BACK = object()
+
+
+def _is_back(raw: str) -> bool:
+    return raw.strip().lower() in ("b", "back")
+
+
+def _pick_one(label: str, options: list[str], default: int = 1, allow_back: bool = True):
+    """Print numbered options, return the selected string (or _BACK)."""
     print(f"  {label}")
     for i, opt in enumerate(options, 1):
         print(f"    [{i}] {opt}")
-    raw = input(f"  Choice ({default}): ").strip()
+    hint = "  Choice (" + str(default) + (", b=back" if allow_back else "") + "): "
+    raw = input(hint).strip()
+    if allow_back and _is_back(raw):
+        return _BACK
     idx = int(raw) if raw.isdigit() and 1 <= int(raw) <= len(options) else default
     chosen = options[idx - 1]
     print(f"  \u2192 {chosen}\n")
     return chosen
 
 
-def _pick_many(label: str, options: list[str]) -> list[str]:
-    """Print numbered options, allow comma-separated multi-select, return list."""
+def _pick_many(label: str, options: list[str], allow_back: bool = True):
+    """Print numbered options, allow comma-separated multi-select, return list (or _BACK)."""
     print(f"  {label}")
     for i, opt in enumerate(options, 1):
         print(f"    [{i}] {opt}")
-    raw = input("  Choices (comma-separated, or Enter for none): ").strip()
+    hint = "  Choices (comma-separated, Enter=none" + (", b=back" if allow_back else "") + "): "
+    raw = input(hint).strip()
+    if allow_back and _is_back(raw):
+        return _BACK
     if not raw:
         print("  \u2192 None\n")
         return []
@@ -2048,10 +2062,17 @@ def _pick_many(label: str, options: list[str]) -> list[str]:
     return selected
 
 
-def _meal_grid_inner(stdscr) -> dict[str, list[str]]:
-    """Curses inner function: interactive 7x3 meal toggle grid."""
-    # State: 7 days x 3 meals, all checked by default
-    grid = [[True] * len(_MEALS) for _ in range(len(_DAYS))]
+def _meal_grid_inner(stdscr, initial=None):
+    """Curses inner function: interactive 7x3 meal toggle grid.
+
+    Returns a schedule dict, or _BACK if the user pressed 'b'.
+    `initial` is an optional schedule dict to pre-fill the grid.
+    """
+    # State: 7 days x 3 meals, all checked by default (or pre-filled from initial)
+    if initial:
+        grid = [[m in initial.get(day, []) for m in _MEALS] for day in _DAYS]
+    else:
+        grid = [[True] * len(_MEALS) for _ in range(len(_DAYS))]
     cursor_row, cursor_col = 0, 0
 
     curses.curs_set(0)
@@ -2081,7 +2102,7 @@ def _meal_grid_inner(stdscr) -> dict[str, list[str]]:
 
         # Help
         stdscr.addstr(HELP_ROW, 2,
-                      "Arrow keys: move  |  Space: toggle  |  Enter: confirm",
+                      "Arrow keys: move  |  Space: toggle  |  Enter: confirm  |  b: back",
                       curses.A_DIM)
 
         # Column headers
@@ -2092,8 +2113,15 @@ def _meal_grid_inner(stdscr) -> dict[str, list[str]]:
                           curses.A_BOLD | curses.A_UNDERLINE)
 
         # Grid rows
+        total_meals = 0
+        active_days = 0
+        count_x = x_off + len(_MEALS) * MEAL_W + 2
         for i, day in enumerate(_DAYS):
             y = GRID_ROW + i
+            row_count = sum(grid[i])
+            total_meals += row_count
+            if row_count > 0:
+                active_days += 1
             day_attr = curses.A_BOLD if i == cursor_row else 0
             stdscr.addstr(y, 2, day.ljust(DAY_W), day_attr)
 
@@ -2111,14 +2139,25 @@ def _meal_grid_inner(stdscr) -> dict[str, list[str]]:
 
                 stdscr.addstr(y, x, symbol.center(MEAL_W), attr)
 
+            # Per-row count, e.g. "(2/3)" — green if any selected, dim otherwise
+            count_str = f"({row_count}/{len(_MEALS)})"
+            count_attr = (curses.color_pair(1) | curses.A_BOLD) if row_count > 0 else curses.A_DIM
+            stdscr.addstr(y, count_x, count_str, count_attr)
+
+        # Live total summary
+        summary_attr = (curses.color_pair(1) | curses.A_BOLD) if total_meals > 0 \
+                        else (curses.color_pair(5) | curses.A_BOLD)
+        summary = f"\u2192 {active_days} {'day' if active_days == 1 else 'days'} \u00b7 {total_meals} {'meal' if total_meals == 1 else 'meals'} total"
+        stdscr.addstr(FOOTER_ROW, 2, summary, summary_attr)
+
         # Shortcuts
-        stdscr.addstr(FOOTER_ROW + 1, 2,
-                      "[a] All  [n] None  [w] Weekday dinners  [f] Full weekends",
+        stdscr.addstr(FOOTER_ROW + 2, 2,
+                      "[a] All  [n] None  [w] Weekday dinners  [f] Full weekends  [b] Back",
                       curses.color_pair(5))
 
         # Warning (if any)
         if warn_msg:
-            stdscr.addstr(FOOTER_ROW + 3, 2, warn_msg,
+            stdscr.addstr(FOOTER_ROW + 4, 2, warn_msg,
                           curses.color_pair(1) | curses.A_BOLD)
 
         stdscr.refresh()
@@ -2141,6 +2180,8 @@ def _meal_grid_inner(stdscr) -> dict[str, list[str]]:
                 warn_msg = "Select at least one meal!"
                 continue
             break
+        elif key in (ord("b"), ord("B")):
+            return _BACK
         elif key == ord("a"):
             for i in range(len(_DAYS)):
                 for j in range(len(_MEALS)):
@@ -2168,86 +2209,149 @@ def _meal_grid_inner(stdscr) -> dict[str, list[str]]:
     return schedule
 
 
-def _meal_grid_picker() -> dict[str, list[str]]:
+def _meal_grid_picker(initial=None):
     """Show an interactive curses grid for selecting meals per day.
 
-    Returns a dict mapping day names to lists of selected meal names.
-    Falls back to all meals on all days if not running in a terminal.
+    Returns a schedule dict (day → list of meal names), or _BACK if the
+    user pressed 'b'. Falls back to all meals on all days if not running
+    in a terminal.
     """
     if not sys.stdout.isatty():
         return {day: list(_MEALS) for day in _DAYS}
-    return curses.wrapper(_meal_grid_inner)
+    return curses.wrapper(_meal_grid_inner, initial)
 
 
-def _meal_plan_survey() -> dict:
-    """Run an interactive survey to collect meal planning preferences.
+def _step_diet(state, idx, total):
+    print(_step_header(idx, total, "Diet"))
+    return _pick_one("What kind of diet?", _DIET_OPTIONS, allow_back=idx > 1)
 
-    Returns a dict with keys: diet, allergies, people, schedule, organic,
-    cooking, cuisine, budget, extra.
-    Raises EOFError/KeyboardInterrupt if the user cancels.
-    """
-    print("\n  🍽️  Meal Planner — Setup")
-    print("  ─────────────────────────────────────\n")
 
-    # 1. Diet
-    diet = _pick_one("Diet", _DIET_OPTIONS)
-
-    # 2. Allergies (multi-select from common + free text)
-    allergies = _pick_many("Allergies / intolerances", _ALLERGY_OPTIONS)
-    other_allergy = input("  Other allergies? (or Enter to skip): ").strip()
-    if other_allergy:
-        allergies.append(other_allergy)
-        print(f"  \u2192 Added: {other_allergy}\n")
+def _step_allergies(state, idx, total):
+    print(_step_header(idx, total, "Allergies"))
+    selected = _pick_many("Allergies / intolerances", _ALLERGY_OPTIONS)
+    if selected is _BACK:
+        return _BACK
+    raw = input("  Other allergies? (Enter=none, b=back): ").strip()
+    if _is_back(raw):
+        return _BACK
+    if raw:
+        selected.append(raw)
+        print(f"  \u2192 Added: {raw}\n")
     else:
         print()
+    return selected
 
-    # 3. People
-    raw = input("  How many people? (1): ").strip()
+
+def _step_people(state, idx, total):
+    print(_step_header(idx, total, "Number of people"))
+    raw = input("  How many people are you cooking for? (1, b=back): ").strip()
+    if _is_back(raw):
+        return _BACK
     people = int(raw) if raw.isdigit() and int(raw) > 0 else 1
     print(f"  \u2192 {people} {'person' if people == 1 else 'people'}\n")
+    return people
 
-    # 4. Meal grid (curses)
-    print("  Opening weekly meal picker...\n")
-    schedule = _meal_grid_picker()
+
+def _step_schedule(state, idx, total):
+    print(_step_header(idx, total, "Weekly meal schedule"))
+    print("  Pick which meals you want planned each day.")
+    print("  (arrows to move · space to toggle · b to go back · enter to confirm)\n")
+    schedule = _meal_grid_picker(initial=state.get("schedule"))
+    if schedule is _BACK:
+        return _BACK
     total_meals = sum(len(m) for m in schedule.values())
     active_days = len(schedule)
-    print(f"  \u2192 {active_days} days, {total_meals} meals/week\n")
+    print(f"  \u2192 {active_days} {'day' if active_days == 1 else 'days'} \u00b7 "
+          f"{total_meals} {'meal' if total_meals == 1 else 'meals'}/week\n")
+    return schedule
 
-    # 5. Organic
-    organic = _pick_one("Organic preference", _ORGANIC_OPTIONS, default=3)
 
-    # 6. Cooking time
-    cooking = _pick_one("Cooking time per meal", _COOKING_OPTIONS, default=2)
+def _step_organic(state, idx, total):
+    print(_step_header(idx, total, "Organic preference"))
+    return _pick_one("How important is organic?", _ORGANIC_OPTIONS, default=3)
 
-    # 7. Cuisine
-    cuisine = _pick_one("Cuisine style", _CUISINE_OPTIONS)
 
-    # 8. Budget
-    raw = input("  Budget in kr? (500): ").strip()
+def _step_cooking(state, idx, total):
+    print(_step_header(idx, total, "Cooking time"))
+    return _pick_one("How long can you spend per meal?", _COOKING_OPTIONS, default=2)
+
+
+def _step_cuisine(state, idx, total):
+    print(_step_header(idx, total, "Cuisine style"))
+    return _pick_one("Preferred cuisine?", _CUISINE_OPTIONS)
+
+
+def _step_budget(state, idx, total):
+    print(_step_header(idx, total, "Budget"))
+    raw = input("  Weekly budget in kr? (500, b=back): ").strip()
+    if _is_back(raw):
+        return _BACK
     try:
         budget = float(raw) if raw else 500.0
     except ValueError:
         budget = 500.0
     print(f"  \u2192 {budget:.0f} kr\n")
+    return budget
 
-    # 9. Extra notes (optional)
-    extra = input("  Any other notes? (optional, Enter to skip)\n  : ").strip()
-    if extra:
-        print(f"  \u2192 {extra}\n")
+
+def _step_extra(state, idx, total):
+    print(_step_header(idx, total, "Anything else?"))
+    raw = input("  Extra notes (Enter=skip, b=back):\n  : ").strip()
+    if _is_back(raw):
+        return _BACK
+    if raw:
+        print(f"  \u2192 {raw}\n")
     else:
         print()
+    return raw
 
-    return {
-        "diet": diet,
-        "allergies": allergies,
-        "people": people,
-        "schedule": schedule,
-        "organic": organic,
-        "cooking": cooking,
-        "cuisine": cuisine,
-        "budget": budget,
-        "extra": extra,
-    }
+
+def _step_header(idx, total, title):
+    return f"  \u2500\u2500 Step {idx}/{total}: {title} \u2500\u2500"
+
+
+_SURVEY_STEPS = [
+    ("diet", _step_diet),
+    ("allergies", _step_allergies),
+    ("people", _step_people),
+    ("schedule", _step_schedule),
+    ("organic", _step_organic),
+    ("cooking", _step_cooking),
+    ("cuisine", _step_cuisine),
+    ("budget", _step_budget),
+    ("extra", _step_extra),
+]
+
+
+def _meal_plan_survey() -> dict:
+    """Run an interactive survey to collect meal planning preferences.
+
+    Type `b` (or `back`) at any prompt to revisit the previous step. In the
+    meal-grid step, press the `b` key.
+
+    Returns a dict with keys matching _SURVEY_STEPS. Raises
+    EOFError/KeyboardInterrupt if the user cancels.
+    """
+    print("\n  🍽️  Meal Planner — Setup")
+    print("  ─────────────────────────────────────")
+    print("  Type 'b' at any prompt to go back to the previous question.\n")
+
+    state: dict = {}
+    total = len(_SURVEY_STEPS)
+    i = 0
+    while i < total:
+        key, fn = _SURVEY_STEPS[i]
+        result = fn(state, i + 1, total)
+        if result is _BACK:
+            if i == 0:
+                print("  (already at the first question)\n")
+                continue
+            i -= 1
+            continue
+        state[key] = result
+        i += 1
+
+    return state
 
 
 def _format_survey_message(survey: dict) -> str:
