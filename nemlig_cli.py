@@ -3079,13 +3079,9 @@ Once all items are added, present a single clean summary with:
      BUDGET                           500.00 kr
      REMAINING                         11.76 kr
 
-3. Ask: "Approve this plan? (yes/no)" — wait for the user to confirm.
+3. Ask: "Approve this plan? Type **yes** to sync your nemlig.com basket and export a printable PDF, or describe changes you want." — wait for the user to respond.
 
-After the user approves, do BOTH of the following in the same turn (you can call multiple tools in parallel):
-1. Call sync_to_basket — this pushes every item from the grocery list into the user's actual nemlig.com basket so they can check out. This is REQUIRED on approval; the user expects their cart to be filled.
-2. Call export_meal_plan with the full week's meals so they get a printable HTML/PDF version. Each meal entry must include: day, slot (breakfast/lunch/dinner/snack), name, description, ingredients (with quantities), steps_dk and steps_en (mirrored bilingual recipe), and macros if you can estimate them.
-
-Then send a short confirmation message that includes (a) the basket sync result and (b) the file path returned by export_meal_plan.
+The harness handles the approval flow deterministically: when the user types yes/y/approve, the basket is synced automatically (you do NOT need to call sync_to_basket), and the harness will then prompt you to call export_meal_plan with the full week's meals. Each meal entry must include: day, slot (breakfast/lunch/dinner/snack), name, description, ingredients (with quantities), steps_dk and steps_en (mirrored bilingual recipe), and macros if you can estimate them.
 
 If the user says no or wants changes:
 - NEVER use clear_grocery_list. Keep the existing list intact.
@@ -3266,6 +3262,31 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False, use_template: bool = Tru
         if not _run_turn(first_message):
             return 1
 
+    # ── Approval / sync helpers (deterministic, not LLM-driven) ─
+    _APPROVE = {"y", "yes", "yep", "yeah", "ok", "okay", "approve", "approved",
+                "do it", "go", "go for it", "looks good", "send it"}
+    _SYNC_ONLY = {"sync", "sync basket", "sync cart", "list-sync", "list sync",
+                  "just list-sync", "push to basket", "fill cart"}
+
+    def _do_sync_basket() -> bool:
+        """Push the local grocery list into the actual nemlig.com basket."""
+        list_data = load_grocery_list()
+        items = list_data.get("items", [])
+        if not items:
+            print("\n  ⚠ Grocery list is empty — nothing to sync.\n")
+            return False
+        print(f"\n  🛒 Syncing {len(items)} items to your nemlig.com basket...")
+        ok = 0
+        for it in items:
+            try:
+                add_to_basket(auth, it["product_id"], it.get("quantity", 1))
+                print(f"     ✓ {it.get('name','?')} x{it.get('quantity',1)}")
+                ok += 1
+            except Exception as e:
+                print(f"     ✗ {it.get('name','?')}: {e}")
+        print(f"\n  Synced {ok}/{len(items)} items. Open https://www.nemlig.com/basket to check out.\n")
+        return ok > 0
+
     # ── Chat loop for follow-up adjustments ─────────────────────
     is_first_free_text = cli and first_message is None
     while True:
@@ -3278,9 +3299,29 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False, use_template: bool = Tru
         if not user_input:
             continue
 
-        if user_input.lower() in ("done", "exit", "quit", "q"):
+        lower = user_input.lower().strip(".!?")
+        if lower in ("done", "exit", "quit", "q"):
             print("\n  Exiting meal planner.\n")
             return 0
+
+        # Sync-only shortcut: just push to basket, no LLM round-trip
+        if lower in _SYNC_ONLY:
+            _do_sync_basket()
+            continue
+
+        # Approval shortcut: sync deterministically, then ask the LLM to export
+        if lower in _APPROVE:
+            synced = _do_sync_basket()
+            bridge = ("The user just approved the plan. I have already synced the grocery list "
+                      "to their nemlig.com basket on their behalf. "
+                      if synced else "The user approved but the grocery list was empty. ")
+            bridge += ("Now call export_meal_plan with the full week's meals "
+                       "(every day, slot, name, ingredients, steps_dk, steps_en, macros) "
+                       "so they get a printable HTML/PDF. Do NOT call sync_to_basket — it's done. "
+                       "After the export, send a one-line confirmation with the file path.")
+            _run_turn(bridge)
+            print("  (Type 'exit' to quit, or keep chatting to adjust the plan.)\n")
+            continue
 
         if is_first_free_text and template_active:
             user_input = user_input + "\n\n" + render_meal_template_block(MEAL_TEMPLATE)
