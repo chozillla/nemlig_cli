@@ -145,6 +145,75 @@ def _auth_headers(auth):
     return h
 
 
+# ── Nutrition Extraction ─────────────────────────────────────
+
+def _parse_eu_number(s):
+    m = re.search(r"(\d+(?:[,.]\d+)?)", s or "")
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _parse_kcal(s):
+    """Pull kcal from values like '276 kJ / 65 kcal'."""
+    m = re.search(r"(\d+(?:[,.]\d+)?)\s*kcal", s or "", re.IGNORECASE)
+    if m:
+        try:
+            return float(m.group(1).replace(",", "."))
+        except ValueError:
+            return None
+    return _parse_eu_number(s)
+
+
+def extract_nutrition(product_detail):
+    """Return dict with per-100g kcal/protein_g/fat_g/carbs_g, or None."""
+    facts = (product_detail.get("Declarations") or {}).get("NutritionFacts") or []
+    if not facts:
+        return None
+    out = {}
+    for f in facts:
+        name = (f.get("Name") or "").lower()
+        val = f.get("Value") or ""
+        if "energi" in name or "energy" in name:
+            kc = _parse_kcal(val)
+            if kc is not None:
+                out["kcal"] = kc
+        elif "protein" in name:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["protein_g"] = n
+        elif "fedt" in name or "fat" in name:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["fat_g"] = n
+        elif "kulhydrat" in name or "carb" in name:
+            n = _parse_eu_number(val)
+            if n is not None:
+                out["carbs_g"] = n
+    return out or None
+
+
+def fetch_product_nutrition(auth, product_url):
+    """GET the product's GetAsJson page and parse its nutrition. Returns dict or None."""
+    if not product_url:
+        return None
+    try:
+        h = _auth_headers(auth)
+        params = {"GetAsJson": "1", "t": auth["search_params"]["timeslotUtc"], "d": "1"}
+        r = auth["session"].get(f"{NEMLIG_BASE}/{product_url}", headers=h, params=params, timeout=10)
+        if r.status_code != 200:
+            return None
+        for item in r.json().get("content", []):
+            if item.get("TemplateName") == "productdetailspot":
+                return extract_nutrition(item)
+    except Exception:
+        return None
+    return None
+
+
 # ── LLM Call ─────────────────────────────────────────────────
 
 def call_llm(system_prompt, user_message, llm_config):
@@ -230,6 +299,11 @@ QUANTITY RULES:
 - Quantity = number of PACKAGES to buy from the store (1-3 max per ingredient)
 - Most items need quantity 1. Only staples like rice/pasta might need 2.
 - Consolidate: if multiple meals use chicken, list it ONCE with combined quantity
+
+CATEGORY RULES (used by the picker for macro-aware selection):
+- Use exactly one of: "protein", "dairy", "vegetable", "grain", "fruit", "fat", "condiment", "other"
+- Tag every meat, fish, egg, tofu/tempeh, and high-protein supplement as "protein". The picker will optimize protein_g/kr for these.
+- Tag yogurt/skyr/cheese/milk as "dairy"; rice/pasta/bread/oats as "grain"; oil/butter/nut butter as "fat".
 
 OTHER RULES:
 - Scale for the number of people
@@ -410,30 +484,53 @@ def search_and_aggregate(auth, ingredients, budget, wants_organic):
                 not_found.append({"searchTerm": ing["searchTerm"], "displayName": ing.get("displayName", ing["searchTerm"]), "wantedQty": ing.get("quantity", 1)})
                 continue
 
-            # Pick best product
+            # Narrow candidate pool: organic-first if wanted, then cheapest 3
             if wants_organic:
                 organic = [p for p in available if re.search(r"øko|økologisk", p.get("Name", ""), re.IGNORECASE)]
-                if organic:
-                    organic.sort(key=lambda p: p.get("Price", 999))
-                    best = organic[0]
-                else:
-                    available.sort(key=lambda p: p.get("Price", 999))
-                    best = available[0]
+                pool = organic if organic else available
             else:
-                available.sort(key=lambda p: p.get("Price", 999))
-                best = available[0]
+                pool = available
+            pool = sorted(pool, key=lambda p: p.get("Price", 999))[:3]
+
+            # Score: for protein category, maximize protein_g per kr (with nutrition fetch)
+            # For other categories, cheapest wins; fetch nutrition only on the chosen one.
+            category = (ing.get("category") or "").lower()
+            best = None
+            best_nutrition = None
+
+            if category == "protein":
+                scored = []
+                for cand in pool:
+                    nut = fetch_product_nutrition(auth, cand.get("Url", ""))
+                    price_c = cand.get("Price", 0) or 0.01
+                    protein = (nut or {}).get("protein_g", 0) if nut else 0
+                    scored.append((cand, nut, protein / price_c if protein else 0))
+                scored_with_data = [s for s in scored if s[2] > 0]
+                if scored_with_data:
+                    scored_with_data.sort(key=lambda s: s[2], reverse=True)
+                    best, best_nutrition, _ = scored_with_data[0]
+                else:
+                    # No nutrition data on any candidate — fall back to cheapest
+                    best = pool[0]
+                    best_nutrition = scored[0][1] if scored else None
+
+            if best is None:
+                best = pool[0]
+                best_nutrition = fetch_product_nutrition(auth, best.get("Url", ""))
 
             qty = min(ing.get("quantity", 1), 3)
             price = best.get("Price", 0)
             matched.append({
                 "searchTerm": ing["searchTerm"],
                 "displayName": ing.get("displayName", ing["searchTerm"]),
+                "category": ing.get("category", ""),
                 "wantedQty": qty,
                 "productId": best["Id"],
                 "productName": best.get("Name", ""),
                 "brand": best.get("Brand", ""),
                 "price": price,
                 "totalPrice": price * qty,
+                "nutrition": best_nutrition,
             })
 
         except Exception:
@@ -473,12 +570,28 @@ def search_and_aggregate(auth, ingredients, budget, wants_organic):
             not_found.append({"searchTerm": removed["searchTerm"], "displayName": removed["displayName"] + " (over budget)", "wantedQty": removed["wantedQty"]})
             total_price = sum(m["totalPrice"] for m in matched)
 
+    # Per-100g basket macro summary (informational; does not assume pack weights)
+    nutrition_summary = {"items_with_data": 0, "avg_per_100g": {}}
+    keyed = {"kcal": [], "protein_g": [], "carbs_g": [], "fat_g": []}
+    for m in matched:
+        nut = m.get("nutrition") or {}
+        if not nut:
+            continue
+        nutrition_summary["items_with_data"] += 1
+        for k in keyed:
+            if isinstance(nut.get(k), (int, float)):
+                keyed[k].append(nut[k])
+    for k, vals in keyed.items():
+        if vals:
+            nutrition_summary["avg_per_100g"][k] = round(sum(vals) / len(vals), 1)
+
     return {
         "matched": matched,
         "notFound": not_found,
         "totalPrice": total_price,
         "budget": budget,
         "remaining": budget - total_price,
+        "nutritionSummary": nutrition_summary,
     }
 
 
@@ -676,6 +789,7 @@ class MealPlanHandler(http.server.SimpleHTTPRequestHandler):
                 "totalPrice": results["totalPrice"],
                 "budget": results["budget"],
                 "remaining": results["remaining"],
+                "nutritionSummary": results.get("nutritionSummary", {}),
             })
 
         except Exception as e:

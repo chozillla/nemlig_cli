@@ -444,6 +444,28 @@ textarea::placeholder, input::placeholder { color: var(--muted-soft); }
 .remove-btn:hover { color: var(--red); background: var(--red-bg); }
 .receipt-line.removed { opacity: 0.35; text-decoration: line-through; }
 
+/* ── Macro chips (per-item nutrition) ─ */
+.shop-row { padding: 0.5rem 0; border-bottom: 1px dashed var(--border); }
+.shop-row:last-of-type { border-bottom: none; }
+.shop-row .receipt-line { padding: 0; border: none; }
+.macro-chip {
+  display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.25rem;
+  font-size: 0.6875rem; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.macro-chip .m { background: var(--bg); border: 1px solid var(--border); border-radius: 99px; padding: 0.05rem 0.5rem; }
+.macro-chip .m.protein { color: var(--green); border-color: var(--green); }
+.macro-chip .per { color: var(--border); margin-left: auto; align-self: center; }
+.macro-summary {
+  display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;
+  margin: 0.75rem 0 1rem; font-size: 0.75rem;
+}
+.macro-summary .m {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.375rem 0.625rem; font-variant-numeric: tabular-nums;
+}
+.macro-summary .m strong { display: block; color: var(--text); font-weight: 700; }
+.macro-summary .m span { color: var(--muted); font-size: 0.6875rem; }
+
 /* ── Edit preferences link ──── */
 .edit-prefs {
   display: inline-block; font-size: 0.6875rem; color: var(--muted);
@@ -1621,14 +1643,41 @@ function renderResults() {
   // Shopping list card (right column on desktop)
   html += `<div class="shop-card">`;
   html += `<div class="section-title" style="margin-top:0">Shopping List</div>`;
+
+  // Basket macro summary (avg per-100g across matched items with nutrition data)
+  const ns = state.nutritionSummary;
+  if (ns && ns.items_with_data > 0 && ns.avg_per_100g) {
+    const a = ns.avg_per_100g;
+    html += `<div class="macro-summary">`;
+    if (a.kcal != null) html += `<div class="m"><strong>${Math.round(a.kcal)}</strong><span>kcal avg/100g</span></div>`;
+    if (a.protein_g != null) html += `<div class="m"><strong>${a.protein_g.toFixed(1)} g</strong><span>protein avg</span></div>`;
+    if (a.carbs_g != null) html += `<div class="m"><strong>${a.carbs_g.toFixed(1)} g</strong><span>carbs avg</span></div>`;
+    if (a.fat_g != null) html += `<div class="m"><strong>${a.fat_g.toFixed(1)} g</strong><span>fat avg</span></div>`;
+    html += `<div class="m"><strong>${ns.items_with_data}/${state.matched.length}</strong><span>items w/ data</span></div>`;
+    html += `</div>`;
+  }
+
   for (let si = 0; si < state.matched.length; si++) {
     const item = state.matched[si];
     const removed = item._removed ? ' removed' : '';
-    html += `<div class="receipt-line${removed}" id="shop-${si}">
-      <span class="name">${esc(item.productName)}</span>
-      <span class="qty">&times;${item.wantedQty}</span>
-      <span class="price">${item._removed ? '—' : item.totalPrice.toFixed(2) + ' kr'}</span>
-      <button class="remove-btn no-print" onclick="toggleShopItem(${si})" title="${item._removed ? 'Restore' : 'Remove'}">${item._removed ? '+' : '&times;'}</button>
+    const n = item.nutrition;
+    let macroHtml = '';
+    if (n) {
+      macroHtml = `<div class="macro-chip">`;
+      if (n.kcal != null) macroHtml += `<span class="m">${Math.round(n.kcal)} kcal</span>`;
+      if (n.protein_g != null) macroHtml += `<span class="m protein">P ${n.protein_g.toFixed(1)} g</span>`;
+      if (n.carbs_g != null) macroHtml += `<span class="m">C ${n.carbs_g.toFixed(1)} g</span>`;
+      if (n.fat_g != null) macroHtml += `<span class="m">F ${n.fat_g.toFixed(1)} g</span>`;
+      macroHtml += `<span class="per">/100g</span></div>`;
+    }
+    html += `<div class="shop-row" id="shop-${si}">
+      <div class="receipt-line${removed}">
+        <span class="name">${esc(item.productName)}</span>
+        <span class="qty">&times;${item.wantedQty}</span>
+        <span class="price">${item._removed ? '—' : item.totalPrice.toFixed(2) + ' kr'}</span>
+        <button class="remove-btn no-print" onclick="toggleShopItem(${si})" title="${item._removed ? 'Restore' : 'Remove'}">${item._removed ? '+' : '&times;'}</button>
+      </div>
+      ${macroHtml}
     </div>`;
   }
   html += `<div class="receipt-divider"></div>`;
@@ -1886,6 +1935,7 @@ async function submitWithNotes(notes) {
       state.notFound = data.notFound || [];
       state.totalPrice = data.totalPrice || 0;
       state.remaining = (state.budget || 500) - state.totalPrice;
+      state.nutritionSummary = data.nutritionSummary || null;
       state.phase = 'results';
       render();
       return;
