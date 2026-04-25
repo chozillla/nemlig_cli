@@ -2102,7 +2102,7 @@ def _meal_grid_inner(stdscr, initial=None):
 
         # Help
         stdscr.addstr(HELP_ROW, 2,
-                      "Arrow keys: move  |  Space: toggle  |  Enter: confirm  |  b: back",
+                      "Arrows: move  |  Space: toggle cell  |  d: toggle day  |  c: toggle column  |  Enter: confirm  |  b: back",
                       curses.A_DIM)
 
         # Column headers
@@ -2152,7 +2152,7 @@ def _meal_grid_inner(stdscr, initial=None):
 
         # Shortcuts
         stdscr.addstr(FOOTER_ROW + 2, 2,
-                      "[a] All  [n] None  [w] Weekday dinners  [f] Full weekends  [b] Back",
+                      "[d] Day  [c] Column  [a] All  [n] None  [w] Weekday dinners  [f] Full weekends  [b] Back",
                       curses.color_pair(5))
 
         # Warning (if any)
@@ -2199,6 +2199,16 @@ def _meal_grid_inner(stdscr, initial=None):
             for j in range(len(_MEALS)):  # Sat + Sun all on
                 grid[5][j] = True
                 grid[6][j] = True
+        elif key in (ord("d"), ord("D")):
+            # Toggle the whole day (current row): off if any selected, else all on
+            row_has_any = any(grid[cursor_row])
+            for j in range(len(_MEALS)):
+                grid[cursor_row][j] = not row_has_any
+        elif key in (ord("c"), ord("C")):
+            # Toggle the whole meal column (e.g. all dinners across the week)
+            col_has_any = any(grid[i][cursor_col] for i in range(len(_DAYS)))
+            for i in range(len(_DAYS)):
+                grid[i][cursor_col] = not col_has_any
 
     # Build result — omit days with no meals
     schedule: dict[str, list[str]] = {}
@@ -2255,7 +2265,7 @@ def _step_people(state, idx, total):
 def _step_schedule(state, idx, total):
     print(_step_header(idx, total, "Weekly meal schedule"))
     print("  Pick which meals you want planned each day.")
-    print("  (arrows to move · space to toggle · b to go back · enter to confirm)\n")
+    print("  (arrows to move · space: toggle cell · d: toggle day · c: toggle column · enter: confirm · b: back)\n")
     schedule = _meal_grid_picker(initial=state.get("schedule"))
     if schedule is _BACK:
         return _BACK
