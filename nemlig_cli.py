@@ -689,6 +689,175 @@ def save_grocery_list(data: dict) -> None:
     LIST_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+# Meal plan HTML export — written to ~/Documents/nemlig-meal-plans/
+MEAL_PLAN_EXPORT_DIR = Path.home() / "Documents" / "nemlig-meal-plans"
+
+
+def _esc(s) -> str:
+    """HTML-escape a value (None becomes empty string)."""
+    if s is None:
+        return ""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+                  .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def render_meal_plan_html(title: str = "", people=None, meals: list | None = None) -> str:
+    """Write a self-contained, print-friendly meal plan HTML and return its path."""
+    from datetime import datetime
+    meals = meals or []
+    grocery = load_grocery_list()
+    items = grocery.get("items", [])
+    budget = grocery.get("budget", 0) or 0
+    total = sum(i.get("unit_price", 0) * i.get("quantity", 0) for i in items)
+
+    # Group meals by day in input order
+    days: dict[str, list] = {}
+    day_order: list[str] = []
+    for m in meals:
+        d = m.get("day", "")
+        if d not in days:
+            days[d] = []
+            day_order.append(d)
+        days[d].append(m)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    page_title = title or f"Meal plan — {today}"
+
+    css = """
+    :root { --bg:#fafaf7; --card:#fff; --text:#1a1a1a; --muted:#6b6b6b;
+            --border:#e5e5e0; --green:#2d7a3a; --green-bg:#e8f3ea; --accent:#1a1a1a; }
+    * { box-sizing: border-box; }
+    body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+           color: var(--text); background: var(--bg); margin: 0; padding: 2rem; }
+    .wrap { max-width: 960px; margin: 0 auto; }
+    header { border-bottom: 2px solid var(--accent); padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    header h1 { font-size: 1.75rem; margin: 0 0 0.25rem; font-weight: 800; letter-spacing: -0.02em; }
+    header .meta { color: var(--muted); font-size: 0.875rem; }
+    h2 { font-size: 1.125rem; margin: 2rem 0 0.75rem; font-weight: 700;
+         text-transform: uppercase; letter-spacing: 0.04em; }
+    .day { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+           padding: 1rem 1.25rem; margin-bottom: 1rem; page-break-inside: avoid; }
+    .day-name { font-size: 0.75rem; font-weight: 700; color: var(--muted);
+                text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+    .meal { padding: 0.75rem 0; border-top: 1px dashed var(--border); }
+    .meal:first-of-type { border-top: none; padding-top: 0; }
+    .meal-header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+    .slot { font-size: 0.7rem; font-weight: 700; color: var(--green);
+            background: var(--green-bg); padding: 0.1rem 0.5rem; border-radius: 99px;
+            text-transform: uppercase; letter-spacing: 0.05em; }
+    .meal-name { font-weight: 700; font-size: 1rem; }
+    .desc { color: var(--muted); font-size: 0.8125rem; margin: 0.25rem 0 0; }
+    .macros { display: flex; gap: 0.375rem; flex-wrap: wrap; margin-top: 0.5rem;
+              font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+    .macros span { background: var(--bg); border: 1px solid var(--border);
+                   padding: 0.1rem 0.5rem; border-radius: 99px; color: var(--muted); }
+    .macros span.p { color: var(--green); border-color: var(--green); }
+    .ingredients { margin: 0.625rem 0 0; padding-left: 1.25rem; font-size: 0.8125rem; color: var(--muted); }
+    .recipe { margin-top: 0.625rem; }
+    .recipe ol { margin: 0; padding-left: 1.25rem; font-size: 0.8125rem; }
+    .recipe li { margin-bottom: 0.375rem; }
+    .recipe .en { color: var(--muted); display: block; font-size: 0.75rem; margin-top: 0.125rem; }
+    .shop-card { background: var(--card); border: 1px solid var(--border);
+                 border-radius: 12px; padding: 1.25rem; }
+    .shop-row { display: flex; justify-content: space-between; padding: 0.375rem 0;
+                font-size: 0.8125rem; border-bottom: 1px dashed var(--border); }
+    .shop-row:last-of-type { border-bottom: none; }
+    .shop-row .price { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .totals { display: flex; justify-content: space-between; padding-top: 0.75rem;
+              margin-top: 0.5rem; border-top: 2px solid var(--accent); font-weight: 700; }
+    .totals.budget { font-weight: 500; color: var(--muted); border-top: none; padding-top: 0.25rem; }
+    .totals .green { color: var(--green); }
+    .totals .red    { color: #c0392b; }
+    @media print {
+      body { padding: 0.5rem; background: white; }
+      .day, .shop-card { box-shadow: none; border: 1px solid #ccc; }
+      header { border-bottom-color: #000; }
+    }
+    """
+
+    html_parts = [f"<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>",
+                  f"<title>{_esc(page_title)}</title><style>{css}</style></head><body><div class='wrap'>"]
+
+    sub = f"{today}"
+    if people:
+        sub += f" · {people} people"
+    if meals:
+        sub += f" · {len(meals)} meals"
+    html_parts.append(f"<header><h1>{_esc(page_title)}</h1><div class='meta'>{_esc(sub)}</div></header>")
+
+    # Meal plan section
+    html_parts.append("<h2>Meal plan</h2>")
+    for d in day_order:
+        html_parts.append(f"<div class='day'><div class='day-name'>{_esc(d)}</div>")
+        for m in days[d]:
+            html_parts.append("<div class='meal'><div class='meal-header'>")
+            slot = m.get("slot")
+            if slot:
+                html_parts.append(f"<span class='slot'>{_esc(slot)}</span>")
+            html_parts.append(f"<span class='meal-name'>{_esc(m.get('name',''))}</span></div>")
+            if m.get("description"):
+                html_parts.append(f"<p class='desc'>{_esc(m['description'])}</p>")
+
+            macros = m.get("macros") or {}
+            if any(macros.get(k) for k in ("kcal", "protein_g", "carbs_g", "fat_g")):
+                html_parts.append("<div class='macros'>")
+                if macros.get("kcal"): html_parts.append(f"<span>{int(macros['kcal'])} kcal</span>")
+                if macros.get("protein_g"): html_parts.append(f"<span class='p'>P {macros['protein_g']:.0f}g</span>")
+                if macros.get("carbs_g"): html_parts.append(f"<span>C {macros['carbs_g']:.0f}g</span>")
+                if macros.get("fat_g"): html_parts.append(f"<span>F {macros['fat_g']:.0f}g</span>")
+                html_parts.append("</div>")
+
+            ings = m.get("ingredients") or []
+            if ings:
+                html_parts.append("<ul class='ingredients'>")
+                for ing in ings:
+                    html_parts.append(f"<li>{_esc(ing)}</li>")
+                html_parts.append("</ul>")
+
+            steps_dk = m.get("steps_dk") or []
+            steps_en = m.get("steps_en") or []
+            if steps_dk or steps_en:
+                html_parts.append("<div class='recipe'><ol>")
+                n = max(len(steps_dk), len(steps_en))
+                for i in range(n):
+                    dk = steps_dk[i] if i < len(steps_dk) else ""
+                    en = steps_en[i] if i < len(steps_en) else ""
+                    html_parts.append(f"<li>{_esc(dk)}")
+                    if en:
+                        html_parts.append(f"<span class='en'>{_esc(en)}</span>")
+                    html_parts.append("</li>")
+                html_parts.append("</ol></div>")
+            html_parts.append("</div>")
+        html_parts.append("</div>")
+
+    # Shopping list section
+    html_parts.append("<h2>Shopping list</h2><div class='shop-card'>")
+    if not items:
+        html_parts.append("<p style='color:var(--muted);margin:0'>Grocery list is empty.</p>")
+    else:
+        for it in items:
+            line_total = it.get("unit_price", 0) * it.get("quantity", 0)
+            html_parts.append(
+                f"<div class='shop-row'><span>{_esc(it.get('name',''))} "
+                f"<span style='color:var(--muted)'>×{it.get('quantity',1)}</span></span>"
+                f"<span class='price'>{line_total:.2f} kr</span></div>"
+            )
+        html_parts.append(f"<div class='totals'><span>Total</span><span>{total:.2f} kr</span></div>")
+        if budget:
+            remaining = budget - total
+            cls = "green" if remaining >= 0 else "red"
+            html_parts.append(
+                f"<div class='totals budget'><span>Budget</span><span>{budget:.2f} kr</span></div>"
+                f"<div class='totals budget'><span>Remaining</span><span class='{cls}'>{remaining:+.2f} kr</span></div>"
+            )
+    html_parts.append("</div></div></body></html>")
+
+    MEAL_PLAN_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    out = MEAL_PLAN_EXPORT_DIR / f"plan-{today}.html"
+    out.write_text("".join(html_parts), encoding="utf-8")
+    return str(out.resolve())
+
+
 # Fridge inventory storage
 FRIDGE_FILE = Path.home() / ".config" / "nemlig" / "fridge_inventory.json"
 
@@ -2004,6 +2173,51 @@ MEAL_PLAN_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "export_meal_plan",
+            "description": "After the receipt is shown, save the full meal plan + recipes + shopping list as a styled HTML file and open it in the user's browser (they can print to PDF from there). Pass the complete week's meals with bilingual recipe steps. The shopping list is read automatically from the grocery list. Call this LAST, after add_to_grocery_list calls are done.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Plan title, e.g. 'Body recomp week 16'"},
+                    "people": {"type": "integer", "description": "Number of people the plan is scaled for"},
+                    "meals": {
+                        "type": "array",
+                        "description": "All meals across the week, in chronological order.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "day": {"type": "string", "description": "Day name, e.g. 'Monday'"},
+                                "slot": {"type": "string", "description": "Meal slot: breakfast / lunch / dinner / snack"},
+                                "name": {"type": "string", "description": "Meal name"},
+                                "description": {"type": "string", "description": "One-line description"},
+                                "ingredients": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Ingredient lines with quantities, e.g. '150g chicken breast'"
+                                },
+                                "steps_dk": {"type": "array", "items": {"type": "string"}, "description": "Recipe steps in Danish"},
+                                "steps_en": {"type": "array", "items": {"type": "string"}, "description": "Recipe steps in English"},
+                                "macros": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kcal": {"type": "number"},
+                                        "protein_g": {"type": "number"},
+                                        "carbs_g": {"type": "number"},
+                                        "fat_g": {"type": "number"}
+                                    }
+                                }
+                            },
+                            "required": ["day", "name"]
+                        }
+                    }
+                },
+                "required": ["meals"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "compare_macros",
             "description": "Fetch per-100g nutrition (kcal, protein, carbs, fat) for a list of product IDs and rank by protein-per-krone. Use this for PROTEIN ingredients (meat, fish, eggs, tofu, dairy) to pick the most macro-efficient option. Pass 2-5 candidate IDs from search_products results.",
             "parameters": {
@@ -2147,6 +2361,20 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
             if len(products) == limit:
                 hint = f"\n(Showing {limit} results — increase limit to see more)"
             return header + "\n".join(results) + hint
+
+        elif tool_name == "export_meal_plan":
+            html_path = render_meal_plan_html(
+                title=tool_input.get("title", ""),
+                people=tool_input.get("people"),
+                meals=tool_input.get("meals", []),
+            )
+            try:
+                import webbrowser
+                webbrowser.open(f"file://{html_path}")
+            except Exception:
+                pass
+            return (f"Meal plan exported and opened in your browser:\n  {html_path}\n"
+                    f"Use ⌘P (Cmd+P) → 'Save as PDF' for a printable PDF.")
 
         elif tool_name == "compare_macros":
             ids = [str(p) for p in tool_input.get("product_ids", [])][:5]
@@ -2818,6 +3046,8 @@ Once all items are added, present a single clean summary with:
      REMAINING                         11.76 kr
 
 3. Ask: "Approve this plan? (yes/no)" — wait for the user to confirm.
+
+After the user approves, immediately call export_meal_plan with the full week's meals so they get a printable HTML/PDF version. Each meal entry must include: day, slot (breakfast/lunch/dinner/snack), name, description, ingredients (with quantities), steps_dk and steps_en (mirrored bilingual recipe), and macros if you can estimate them. Then send a one-line confirmation message naming the file path returned by the tool.
 
 If the user says no or wants changes:
 - NEVER use clear_grocery_list. Keep the existing list intact.
