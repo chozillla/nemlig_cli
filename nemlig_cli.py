@@ -59,6 +59,61 @@ except ImportError:
 
 GSHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
+# ── Diet/Meal Template (CLI-only for now; move to website later) ─────
+MEAL_TEMPLATE_PATH = Path(__file__).resolve().parent / "meal_template.json"
+
+
+def load_meal_template():
+    """Load the diet template if present. Missing/invalid file is fine."""
+    try:
+        with open(MEAL_TEMPLATE_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def render_meal_template_block(tpl):
+    """Convert the meal template JSON into prompt text the LLM can act on."""
+    macros = tpl.get("daily_macros", {})
+    foods = tpl.get("priority_foods", {})
+    rules = tpl.get("rules", [])
+    avoid = tpl.get("avoid", [])
+    intolerances = tpl.get("intolerances", [])
+
+    lines = [f"DIET TEMPLATE: {tpl.get('name', 'unnamed')} (goal: {tpl.get('goal', 'n/a')})"]
+
+    if macros:
+        lines.append(
+            f"DAILY MACRO TARGETS (per person, per day): "
+            f"{macros.get('calories', '?')} kcal | "
+            f"{macros.get('protein_g', '?')}g protein | "
+            f"{macros.get('carbs_g', '?')}g carbs | "
+            f"{macros.get('fat_g', '?')}g fat. "
+            f"Plan the week so the daily average lands within ~10% of these targets."
+        )
+
+    if foods:
+        lines.append("PRIORITY FOODS (prefer these Danish nemlig.com items):")
+        for category, items in foods.items():
+            if items:
+                lines.append(f"  - {category}: {', '.join(items)}")
+
+    if rules:
+        lines.append("DIET RULES (must follow):")
+        lines.extend(f"  - {r}" for r in rules)
+
+    if avoid:
+        lines.append("AVOID:")
+        lines.extend(f"  - {a}" for a in avoid)
+
+    if intolerances:
+        lines.append(f"INTOLERANCES (strict — never include): {', '.join(intolerances)}")
+
+    return "\n".join(lines)
+
+
+MEAL_TEMPLATE = load_meal_template()
+
 # Optional: Barcode scanning and image recognition
 try:
     import cv2
@@ -2215,7 +2270,33 @@ def _format_survey_message(survey: dict) -> str:
     lines.append(f"- Budget: {survey['budget']:.0f} kr")
     if survey.get("extra"):
         lines.append(f"- Extra notes: {survey['extra']}")
+    if MEAL_TEMPLATE and survey.get("use_template", True):
+        lines.append("")
+        lines.append(render_meal_template_block(MEAL_TEMPLATE))
     return "\n".join(lines)
+
+
+def _format_survey_message_with_template(survey: dict, use_template: bool) -> str:
+    """Wrapper that respects an explicit per-call use_template override."""
+    survey = dict(survey)
+    survey["use_template"] = use_template
+    return _format_survey_message(survey)
+
+
+def cmd_show_template() -> int:
+    """Print the current diet template (or a friendly hint if missing)."""
+    if not MEAL_TEMPLATE:
+        print(f"\n  No template found at {MEAL_TEMPLATE_PATH}")
+        print("  Create meal_template.json or run with --no-template to disable.\n")
+        return 1
+    print()
+    print(f"  📐 {MEAL_TEMPLATE.get('name', 'unnamed')}")
+    print(f"     Source: {MEAL_TEMPLATE_PATH}")
+    print()
+    for line in render_meal_template_block(MEAL_TEMPLATE).split("\n"):
+        print(f"  {line}")
+    print()
+    return 0
 
 
 def _tool_progress_message(tool_name: str, tool_input: dict) -> str:
@@ -2289,13 +2370,27 @@ IMPORTANT RULES:
 - Follow the cuisine style preference when choosing meals."""
 
 
-def meal_plan_chat(auth: AuthTokens, cli: bool = False) -> int:
+def meal_plan_chat(auth: AuthTokens, cli: bool = False, use_template: bool = True) -> int:
     """Run the AI meal planning chat interface.
 
     When *cli* is False (default), an interactive survey collects the
     user's requirements first and auto-sends them to the LLM.  When True,
     the original free-text chat is used instead.
+
+    When *use_template* is True (default) and meal_template.json exists,
+    the diet template (macros, priority foods, rules) is appended to the
+    first user message so every plan respects it.
     """
+    template_active = bool(MEAL_TEMPLATE) and use_template
+    if template_active:
+        print(f"\n  🎯 Diet template active: {MEAL_TEMPLATE.get('name', 'unnamed')}")
+        m = MEAL_TEMPLATE.get("daily_macros", {})
+        if m:
+            print(f"     Targets/day: {m.get('calories', '?')} kcal · "
+                  f"{m.get('protein_g', '?')}g P · "
+                  f"{m.get('carbs_g', '?')}g C · "
+                  f"{m.get('fat_g', '?')}g F")
+        print("     (use --no-template to disable)\n")
     if not OPENAI_AVAILABLE and not ANTHROPIC_AVAILABLE:
         print("\n  Error: No AI SDK installed.")
         print("  Run: uv add openai   (or: uv add anthropic)")
@@ -2344,7 +2439,7 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False) -> int:
         data["budget"] = survey["budget"]
         save_grocery_list(data)
 
-        first_message = _format_survey_message(survey)
+        first_message = _format_survey_message_with_template(survey, template_active)
 
         # Show summary
         total_meals = sum(len(m) for m in survey["schedule"].values())
@@ -2437,6 +2532,7 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False) -> int:
             return 1
 
     # ── Chat loop for follow-up adjustments ─────────────────────
+    is_first_free_text = cli and first_message is None
     while True:
         try:
             user_input = input("  you> ").strip()
@@ -2450,6 +2546,10 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False) -> int:
         if user_input.lower() in ("done", "exit", "quit", "q"):
             print("\n  Exiting meal planner.\n")
             return 0
+
+        if is_first_free_text and template_active:
+            user_input = user_input + "\n\n" + render_meal_template_block(MEAL_TEMPLATE)
+            is_first_free_text = False
 
         _run_turn(user_input)
 
@@ -3457,6 +3557,11 @@ Examples:
     plan_parser = subparsers.add_parser("plan", help="🤖 AI meal planner - build grocery list from recipes")
     plan_parser.add_argument("--cli", action="store_true",
                              help="Skip survey, use free-text chat instead")
+    plan_parser.add_argument("--no-template", action="store_true",
+                             help="Ignore meal_template.json for this run")
+
+    # Show diet template
+    subparsers.add_parser("template", help="📐 Show the active diet template (meal_template.json)")
 
     # Import command (Google Form recipes)
     import_parser = subparsers.add_parser("import", help="📋 Import recipes from Google Form/Sheet")
@@ -3502,6 +3607,10 @@ Examples:
         elif fridge_cmd == "clear":
             return cmd_fridge_clear()
         # suggest needs auth, falls through
+
+    # Diet template view (no auth needed)
+    if args.command == "template":
+        return cmd_show_template()
 
     # Load credentials: config file first, CLI overrides
     try:
@@ -3555,7 +3664,7 @@ Examples:
             elif args.list_cmd == "sync":
                 return cmd_list_sync(auth, args)
         elif args.command == "plan":
-            return meal_plan_chat(auth, cli=args.cli)
+            return meal_plan_chat(auth, cli=args.cli, use_template=not args.no_template)
         elif args.command == "import":
             return process_form_recipes(auth, args.spreadsheet_id)
         elif args.command == "scan":

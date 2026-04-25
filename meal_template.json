@@ -1,0 +1,68 @@
+{
+  "name": "Chemay - Thirst Trap Physique body recomp",
+  "version": "1.0",
+  "source": "The thirst trap physique-1.pdf",
+  "goal": "body_recomposition",
+
+  "user": {
+    "weight_kg": null,
+    "lean_status": null,
+    "training_days_per_week": 6,
+    "_note": "Set weight_kg and lean_status ('lean' or 'not_lean') then recompute daily_macros below."
+  },
+
+  "daily_macros": {
+    "calories": 3370,
+    "protein_g": 275,
+    "fat_g": 94,
+    "carbs_g": 356,
+    "_note": "Defaults from PDF example (80kg male, lean, 6 days/week, +10% surplus). Recompute with: protein = 1.2-1.6 * lbs; fat = cal*0.25/9; carbs = (cal - 4P - 9F)/4."
+  },
+
+  "meal_structure": [
+    { "slot": "breakfast_smoothie", "kcal": 540, "protein_g": 32, "carbs_g": 79, "fat_g": 10,
+      "ingredients": ["oat milk", "banana", "frozen blueberries", "frozen strawberries", "oats", "whey protein"] },
+    { "slot": "breakfast", "kcal": 768, "protein_g": 51, "carbs_g": 86, "fat_g": 23,
+      "ingredients": ["oats", "peanut butter powder", "whey protein", "oat milk", "banana", "blueberries", "chia seeds", "almonds"] },
+    { "slot": "pre_workout", "kcal": 478, "protein_g": 50, "carbs_g": 49, "fat_g": 7,
+      "ingredients": ["protein bread", "turkey breast", "sundried tomato", "light Miracle Whip", "dijon mustard", "skyr", "maple syrup"] },
+    { "slot": "post_workout", "kcal": 695, "protein_g": 33, "carbs_g": 57, "fat_g": 36,
+      "ingredients": ["low-fat fries or potatoes", "4 whole eggs", "bell pepper", "hot sauce"] },
+    { "slot": "dinner", "kcal": 680, "protein_g": 72, "carbs_g": 71, "fat_g": 7,
+      "ingredients": ["white rice", "chicken breast", "green beans", "salsa verde"] },
+    { "slot": "before_bed", "kcal": 432, "protein_g": 31, "carbs_g": 42, "fat_g": 14,
+      "ingredients": ["salted popcorn", "casein protein"] }
+  ],
+
+  "priority_foods": {
+    "lean_protein": ["kyllingebrystfilet", "kalkunbryst", "magert hakket oksekød", "æg", "dåsetun", "laksefilet"],
+    "high_protein_dairy": ["skyr", "Fage græsk yoghurt 0%", "proteinpudding", "hytteost"],
+    "plant_protein": ["tofu", "tempeh", "sorte bønner", "kidneybønner", "kikærter", "røde linser", "peanutbutter-pulver"],
+    "carbs": ["havregryn", "jasminris", "fuldkornspasta", "kartofler", "sødkartofler", "low-fat pommes frites"],
+    "vegetables": ["broccoli", "haricots verts", "peberfrugt", "spinat", "agurk"],
+    "fruits": ["banan", "blåbær", "jordbær", "kiwi", "vindruer"],
+    "condiments": ["Cholula hot sauce", "salsa verde", "light Miracle Whip", "dijonsennep", "havremælk"],
+    "supplements": ["whey protein", "casein protein", "kreatin monohydrat"]
+  },
+
+  "rules": [
+    "Hit daily protein target — chicken, skyr, and eggs are the anchors",
+    "Keep fat at ~25% of calories — choose lean cuts and light condiments",
+    "Time carbs around workouts (oats, rice, potatoes near training)",
+    "Rotate at least 2 different lean protein sources across the week",
+    "Default to frozen berries for smoothies",
+    "Every meal should clear 25g protein minimum",
+    "Prefer whole-food carbs over processed; fries are a post-workout exception",
+    "Include skyr or Fage in at least 1 meal/day for cheap protein",
+    "All search terms must be Danish nemlig.com product names"
+  ],
+
+  "avoid": [
+    "Sugary drinks and juices",
+    "Heavy oils and creamy sauces (high fat-to-protein ratio)",
+    "Refined snack foods that don't contribute to macros",
+    "Any item flagged as a personal intolerance (set in 'intolerances' below)"
+  ],
+
+  "intolerances": []
+}

@@ -143,9 +143,13 @@ restart:
 
 # ── CLI ──────────────────────────────────────
 
-# 🤖 AI meal planner - guided survey (use --cli for free-text chat)
+# 🤖 AI meal planner - guided survey (use --cli for free-text chat, --no-template to skip diet template)
 plan *FLAGS:
     uv run python nemlig_cli.py plan {{FLAGS}}
+
+# 📐 Show the active diet template (meal_template.json)
+template:
+    uv run python nemlig_cli.py template
 
 # 📋 Import recipes from Google Form/Sheet
 import SPREADSHEET_ID="":

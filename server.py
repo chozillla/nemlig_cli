@@ -34,6 +34,20 @@ AZURE_DEPLOYMENT = os.environ.get("AZURE_DEPLOYMENT", "") or os.environ.get("AZU
 NEMLIG_BASE = "https://www.nemlig.com"
 SEARCH_API = "https://webapi.prod.knl.nemlig.it/searchgateway/api/search"
 
+MEAL_TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meal_template.json")
+
+
+def load_meal_template():
+    """Load the diet template if present. Missing file is fine — feature stays opt-in."""
+    try:
+        with open(MEAL_TEMPLATE_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+MEAL_TEMPLATE = load_meal_template()
+
 
 # ── Nemlig Auth ──────────────────────────────────────────────
 
@@ -228,6 +242,46 @@ OTHER RULES:
 Respond with valid JSON only. No markdown, no explanation."""
 
 
+def render_template_block(tpl):
+    """Convert the meal template JSON into prompt text the LLM can act on."""
+    macros = tpl.get("daily_macros", {})
+    foods = tpl.get("priority_foods", {})
+    rules = tpl.get("rules", [])
+    avoid = tpl.get("avoid", [])
+    intolerances = tpl.get("intolerances", [])
+
+    lines = [f"DIET TEMPLATE: {tpl.get('name', 'unnamed')} (goal: {tpl.get('goal', 'n/a')})"]
+
+    if macros:
+        lines.append(
+            f"DAILY MACRO TARGETS (per person, per day): "
+            f"{macros.get('calories', '?')} kcal | "
+            f"{macros.get('protein_g', '?')}g protein | "
+            f"{macros.get('carbs_g', '?')}g carbs | "
+            f"{macros.get('fat_g', '?')}g fat. "
+            f"Plan the week so the daily average lands within ~10% of these targets."
+        )
+
+    if foods:
+        lines.append("PRIORITY FOODS (prefer these Danish nemlig.com items):")
+        for category, items in foods.items():
+            if items:
+                lines.append(f"  - {category}: {', '.join(items)}")
+
+    if rules:
+        lines.append("DIET RULES (must follow):")
+        lines.extend(f"  - {r}" for r in rules)
+
+    if avoid:
+        lines.append("AVOID:")
+        lines.extend(f"  - {a}" for a in avoid)
+
+    if intolerances:
+        lines.append(f"INTOLERANCES (strict — never include): {', '.join(intolerances)}")
+
+    return "\n".join(lines)
+
+
 def build_prompt(form_data):
     """Build system + user prompts from form data. Returns (system_prompt, user_message, wants_organic)."""
     meals = form_data.get("meals", "")
@@ -247,6 +301,10 @@ def build_prompt(form_data):
         user_msg += f"\nDiet / restrictions: {diet}"
     if notes:
         user_msg += f"\nExtra notes: {notes}"
+
+    use_template = form_data.get("useTemplate", True)
+    if MEAL_TEMPLATE and use_template:
+        user_msg += "\n\n" + render_template_block(MEAL_TEMPLATE)
 
     user_msg += """
 
