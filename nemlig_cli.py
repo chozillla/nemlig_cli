@@ -720,7 +720,9 @@ def render_meal_plan_html(title: str = "", people=None, meals: list | None = Non
             day_order.append(d)
         days[d].append(m)
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    stamp = now.strftime("%Y-%m-%d_%H%M%S")
     page_title = title or f"Meal plan — {today}"
 
     css = """
@@ -853,7 +855,7 @@ def render_meal_plan_html(title: str = "", people=None, meals: list | None = Non
     html_parts.append("</div></div></body></html>")
 
     MEAL_PLAN_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    out = MEAL_PLAN_EXPORT_DIR / f"plan-{today}.html"
+    out = MEAL_PLAN_EXPORT_DIR / f"plan-{stamp}.html"
     out.write_text("".join(html_parts), encoding="utf-8")
     return str(out.resolve())
 
