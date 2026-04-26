@@ -23,7 +23,7 @@ search QUERY:
     echo '> uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "***" search "{{QUERY}}"'
     uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" search "{{QUERY}}"
 
-# Show detailed product information
+# Show detailed product information (includes nutrition / macros)
 details PRODUCT_ID:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -33,6 +33,36 @@ details PRODUCT_ID:
     fi
     echo '> uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "***" details "{{PRODUCT_ID}}"'
     uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" details "{{PRODUCT_ID}}"
+
+# 🥩 Show per-100g macros (kcal, protein, carbs, fat) for top search results
+macros QUERY LIMIT="5":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${NEMLIG_USER:-}" ] || [ -z "${NEMLIG_PASS:-}" ]; then
+        echo "Error: Set NEMLIG_USER and NEMLIG_PASS environment variables"
+        exit 1
+    fi
+    uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" macros "{{QUERY}}" -l "{{LIMIT}}"
+
+# 🍳 Show nemlig.com recipes for a search term
+recipes QUERY LIMIT="5":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${NEMLIG_USER:-}" ] || [ -z "${NEMLIG_PASS:-}" ]; then
+        echo "Error: Set NEMLIG_USER and NEMLIG_PASS environment variables"
+        exit 1
+    fi
+    uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" recipes "{{QUERY}}" -l "{{LIMIT}}"
+
+# 🍽️  Suggest recipes that use items from your grocery list
+list-recipes LIMIT="8":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${NEMLIG_USER:-}" ] || [ -z "${NEMLIG_PASS:-}" ]; then
+        echo "Error: Set NEMLIG_USER and NEMLIG_PASS environment variables"
+        exit 1
+    fi
+    uv run python nemlig_cli.py -u "$NEMLIG_USER" -p "$NEMLIG_PASS" list-recipes -l "{{LIMIT}}"
 
 # Show current shopping basket
 basket:
