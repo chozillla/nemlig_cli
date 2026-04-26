@@ -220,12 +220,16 @@ if [ -n "$CUSTOM_DOMAIN" ]; then
     NAMESERVERS=$(az network dns zone show --resource-group "$RESOURCE_GROUP" \
         --name "$CUSTOM_DOMAIN" --query "nameServers" -o tsv)
 
-    # Update /etc/hosts if it has an entry for this domain
+    # Remove /etc/hosts override — rely on proper DNS instead
     if grep -q "$CUSTOM_DOMAIN" /etc/hosts 2>/dev/null; then
-        echo "  Updating /etc/hosts..."
-        sudo sed -i '' "s/.*$CUSTOM_DOMAIN/$IP $CUSTOM_DOMAIN/" /etc/hosts 2>/dev/null || \
-            echo "  NOTE: Run 'sudo sed -i \"\" \"s/.*$CUSTOM_DOMAIN/$IP $CUSTOM_DOMAIN/\" /etc/hosts' to update /etc/hosts"
+        echo "  Removing stale /etc/hosts entry for $CUSTOM_DOMAIN (DNS handles this now)..."
+        sudo sed -i '' "/$CUSTOM_DOMAIN/d" /etc/hosts 2>/dev/null || \
+            echo "  NOTE: Run 'sudo sed -i \"\" \"/$CUSTOM_DOMAIN/d\" /etc/hosts' to remove the stale entry"
     fi
+
+    # Flush local DNS cache so we pick up the new A record immediately
+    sudo dscacheutil -flushcache 2>/dev/null || true
+    sudo killall -HUP mDNSResponder 2>/dev/null || true
 fi
 
 echo ""
@@ -236,8 +240,9 @@ echo "URL:           https://$FQDN/meal-planner"
 echo "Azure FQDN:    https://$ACI_FQDN"
 echo "API Token:     $API_TOKEN"
 echo ""
+
+# ── DNS Verification ────────────────────────────────────────
 if [ -n "$CUSTOM_DOMAIN" ]; then
-    # Check if domain currently resolves to the correct IP
     CURRENT_IP=$(dig +short "$CUSTOM_DOMAIN" 2>/dev/null | head -1)
     if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "$IP" ]; then
         echo "╔══════════════════════════════════════════════════════════════╗"
@@ -246,8 +251,8 @@ if [ -n "$CUSTOM_DOMAIN" ]; then
         echo "║  $CUSTOM_DOMAIN currently resolves to $CURRENT_IP"
         echo "║  but the new container IP is $IP"
         echo "║                                                            ║"
-        echo "║  Update the A record at your domain registrar NOW,         ║"
-        echo "║  or the site will be unreachable.                          ║"
+        echo "║  If your registrar nameservers do NOT point to Azure DNS,  ║"
+        echo "║  update the A record at your registrar to: $IP"
         echo "╚══════════════════════════════════════════════════════════════╝"
         echo ""
     elif [ -z "$CURRENT_IP" ]; then
@@ -259,6 +264,39 @@ if [ -n "$CUSTOM_DOMAIN" ]; then
         echo ""
     fi
 fi
+
+# ── Health Check (wait for site to respond) ─────────────────
+echo "Waiting for site to come up..."
+HEALTH_URL="https://$ACI_FQDN"
+HEALTH_OK=false
+for i in $(seq 1 30); do
+    HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --connect-timeout 5 "$HEALTH_URL" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+        HEALTH_OK=true
+        break
+    fi
+    printf "  attempt %d/30 (HTTP %s)...\r" "$i" "$HTTP_CODE"
+    sleep 10
+done
+echo ""
+
+if $HEALTH_OK; then
+    echo "Site is UP at $HEALTH_URL"
+    if [ -n "$CUSTOM_DOMAIN" ]; then
+        CUSTOM_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://$CUSTOM_DOMAIN" 2>/dev/null || echo "000")
+        if [ "$CUSTOM_CODE" = "200" ] || [ "$CUSTOM_CODE" = "301" ] || [ "$CUSTOM_CODE" = "302" ]; then
+            echo "Site is UP at https://$CUSTOM_DOMAIN"
+        else
+            echo "WARNING: https://$CUSTOM_DOMAIN returned HTTP $CUSTOM_CODE — DNS may still be propagating"
+        fi
+    fi
+else
+    echo "WARNING: Site did not respond after 5 minutes. Check container logs:"
+    echo "  az container logs -g $RESOURCE_GROUP -n $CONTAINER_GROUP --container-name server"
+    echo "  az container logs -g $RESOURCE_GROUP -n $CONTAINER_GROUP --container-name caddy"
+fi
+
+echo ""
 echo "Commands:"
 echo "  az container logs -g $RESOURCE_GROUP -n $CONTAINER_GROUP --container-name server"
 echo "  az container logs -g $RESOURCE_GROUP -n $CONTAINER_GROUP --container-name caddy"
