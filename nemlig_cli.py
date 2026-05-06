@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 """
-Nemlig.com CLI - A command-line interface for nemlig.com grocery shopping.
+UgeMad - A command-line interface for nemlig.com grocery shopping and weekly meal planning.
 
 Usage:
     python nemlig_cli.py search "cocio"
@@ -208,17 +208,17 @@ class Spinner:
 VERSION = "1.0.0"
 
 LOGO = r"""
-    ░░░    ░░░  ░░░░░░░  ░░░    ░░░  ░░░      ░░░   ░░░░░░░
-    ░░░░   ░░░  ░░░      ░░░░  ░░░░  ░░░      ░░░  ░░░
-    ░░░░░  ░░░  ░░░░░░   ░░░░░░░░░░  ░░░      ░░░  ░░░  ░░░░
-    ░░░ ░░ ░░░  ░░░      ░░░ ░░ ░░░  ░░░      ░░░  ░░░   ░░░
-    ░░░  ░░░░░  ░░░░░░░  ░░░    ░░░  ░░░░░░░  ░░░   ░░░░░░░
+    ░░░  ░░░  ░░░░░░░  ░░░░░░░  ░░░    ░░░  ░░░░░░░  ░░░░░░
+    ░░░  ░░░  ░░       ░░       ░░░░  ░░░░  ░░   ░░  ░░  ░░
+    ░░░  ░░░  ░░  ░░░  ░░░░░░   ░░░░░░░░░░  ░░░░░░░  ░░  ░░
+    ░░░  ░░░  ░░   ░░  ░░       ░░ ░░░░ ░░  ░░   ░░  ░░  ░░
+    ░░░░░░░░  ░░░░░░░  ░░░░░░░  ░░      ░░  ░░   ░░  ░░░░░░
 
     ─────────────────────────────────────────────────────
 
-       ██████╗ ██╗      ██╗    grocery shopping from your terminal
+       ██████╗ ██╗      ██╗    weekly meals · nemlig.com from your terminal
       ██╔════╝ ██║      ██║    ─────────────────────────────────────
-      ██║      ██║      ██║    search, list, sync - all from the cli
+      ██║      ██║      ██║    plan, search, list, sync — all from the cli
       ██║      ██║      ██║
        ██████╗ ███████╗ ██║    v{version}
        ╚═════╝ ╚══════╝ ╚═╝
@@ -701,8 +701,15 @@ def _esc(s) -> str:
                   .replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def render_meal_plan_html(title: str = "", people=None, meals: list | None = None) -> str:
-    """Write a self-contained, print-friendly meal plan HTML and return its path."""
+def render_meal_plan_html(title: str = "", people=None, meals: list | None = None,
+                          start_date: str | None = None) -> str:
+    """Write a self-contained, print-friendly meal plan HTML and return its path.
+
+    The export folder is named after the ISO week of *start_date* (YYYY-MM-DD)
+    when provided, falling back to today. This matters when planning ahead
+    from a weekend — the folder should reflect when the meals are eaten,
+    not when the LLM was run.
+    """
     from datetime import datetime
     meals = meals or []
     grocery = load_grocery_list()
@@ -723,6 +730,14 @@ def render_meal_plan_html(title: str = "", people=None, meals: list | None = Non
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
     stamp = now.strftime("%Y-%m-%d_%H%M%S")
+    week_basis = now.date()
+    if start_date:
+        try:
+            week_basis = datetime.strptime(start_date, "%Y-%m-%d").date()
+        except ValueError:
+            pass  # malformed input — fall back to today's week
+    iso_year, iso_week, _ = week_basis.isocalendar()
+    week_folder = f"week-{iso_year}-W{iso_week:02d}"
     page_title = title or f"Meal plan — {today}"
 
     css = """
@@ -854,8 +869,9 @@ def render_meal_plan_html(title: str = "", people=None, meals: list | None = Non
             )
     html_parts.append("</div></div></body></html>")
 
-    MEAL_PLAN_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    out = MEAL_PLAN_EXPORT_DIR / f"plan-{stamp}.html"
+    week_dir = MEAL_PLAN_EXPORT_DIR / week_folder
+    week_dir.mkdir(parents=True, exist_ok=True)
+    out = week_dir / f"plan-{stamp}.html"
     out.write_text("".join(html_parts), encoding="utf-8")
     return str(out.resolve())
 
@@ -2184,12 +2200,13 @@ MEAL_PLAN_TOOLS = [
         "type": "function",
         "function": {
             "name": "export_meal_plan",
-            "description": "After the receipt is shown, save the full meal plan + recipes + shopping list as a styled HTML file and open it in the user's browser (they can print to PDF from there). Pass the complete week's meals with bilingual recipe steps. The shopping list is read automatically from the grocery list. Call this LAST, after add_to_grocery_list calls are done.",
+            "description": "After the receipt is shown, save the full meal plan + recipes + shopping list as a styled HTML file and open it in the user's browser (they can print to PDF from there). Pass the complete week's meals with bilingual recipe steps. The shopping list is read automatically from the grocery list. Call this LAST, after add_to_grocery_list calls are done. RECIPES MUST FOLLOW THE RECIPE PRECISION STANDARD in the system prompt — explicit heat levels (X/9), pan sizes, exact quantities (no 'splash'/'lidt'), doneness cues paired with timers, starting salt/pepper amounts, per-portion plating weights, active+total time, and storage notes.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "Plan title, e.g. 'Body recomp week 16'"},
+                    "title": {"type": "string", "description": "Plan title, e.g. 'Week of 2026-05-11 (W20) — Body recomp'. Include the start date and ISO week."},
                     "people": {"type": "integer", "description": "Number of people the plan is scaled for"},
+                    "start_date": {"type": "string", "description": "ISO date (YYYY-MM-DD) of the FIRST meal day in the plan. Used to name the export folder by ISO week (week-YYYY-Www/). Apply the delivery-day heuristic in the system prompt — if today is Sat/Sun, this should be next Monday's date, not today."},
                     "meals": {
                         "type": "array",
                         "description": "All meals across the week, in chronological order.",
@@ -2203,10 +2220,10 @@ MEAL_PLAN_TOOLS = [
                                 "ingredients": {
                                     "type": "array",
                                     "items": {"type": "string"},
-                                    "description": "Ingredient lines with quantities, e.g. '150g chicken breast'"
+                                    "description": "Ingredient lines with exact quantities (g, ml, tsp/tbsp). Include pantry items used in the recipe (oil, salt, pepper, soy sauce, lemon, vanilla, baking powder) with quantities even if they aren't on the Nemlig grocery list. Example: 'Hakket oksekød — 400 g', 'Olivenolie — 1 tsk', 'Salt — ½ tsk'."
                                 },
-                                "steps_dk": {"type": "array", "items": {"type": "string"}, "description": "Recipe steps in Danish"},
-                                "steps_en": {"type": "array", "items": {"type": "string"}, "description": "Recipe steps in English"},
+                                "steps_dk": {"type": "array", "items": {"type": "string"}, "description": "Recipe steps in Danish, one numbered instruction per array entry. Each step must specify heat level (X/9 scale), pan/pot size when relevant, exact quantities, doneness cue alongside timer, and any technique tips. End with explicit per-portion plating weights and a storage note."},
+                                "steps_en": {"type": "array", "items": {"type": "string"}, "description": "Recipe steps in English. Must mirror steps_dk 1:1 — same count, same order, same level of detail."},
                                 "macros": {
                                     "type": "object",
                                     "properties": {
@@ -2401,6 +2418,7 @@ def execute_meal_plan_tool(auth: AuthTokens, tool_name: str, tool_input: dict) -
                 title=tool_input.get("title", ""),
                 people=tool_input.get("people"),
                 meals=tool_input.get("meals", []),
+                start_date=tool_input.get("start_date"),
             )
             try:
                 import webbrowser
@@ -3051,6 +3069,19 @@ def _tool_progress_message(tool_name: str, tool_input: dict) -> str:
 
 MEAL_PLAN_SYSTEM_PROMPT = """You are a grocery meal planner for nemlig.com (a Danish online grocery store). Always respond in English.
 
+CURRENT CONTEXT (filled in at runtime):
+- Today: {today_iso} ({weekday})
+- Current ISO week: {iso_year}-W{iso_week:02d}
+
+DELIVERY-DAY HEURISTIC (use this to decide when the plan starts):
+- The user typically does not order on weekends. Use this rule unless the user explicitly overrides it:
+  - If today is Mon–Thu: plan starts the next day (next-day Nemlig delivery).
+  - If today is Fri: default to Monday next week to avoid a weekend delivery.
+  - If today is Sat or Sun: plan starts Monday next week.
+- Compute the planned **start_date** (YYYY-MM-DD of the first meal day) from this rule.
+- Include the start date and its ISO week in the plan title (e.g. "Week of 2026-05-11 (W20) — Thirst Trap Physique").
+- When you call export_meal_plan, **pass `start_date` explicitly** — the harness uses its ISO week to name the export folder (`week-YYYY-Www/`). If you omit it, the folder defaults to today's ISO week, which may be wrong when planning ahead from a weekend.
+
 You follow a strict 3-step flow:
 
 STEP 1 — UNDERSTAND
@@ -3084,6 +3115,22 @@ Once all items are added, present a single clean summary with:
 The harness drives the rest of the flow deterministically:
 - When the user approves, the harness will prompt you to call export_meal_plan with the full week's meals. Each meal entry must include: day, slot (breakfast/lunch/dinner/snack), name, description, ingredients (with quantities), steps_dk and steps_en (mirrored bilingual recipe), and macros if you can estimate them.
 - After the export, the harness asks the user separately whether to push the items into their nemlig.com basket. You do NOT need to call sync_to_basket — the harness handles the cart sync itself once the user confirms.
+
+RECIPE PRECISION STANDARD (mandatory for steps_dk and steps_en):
+Vague recipes are rejected. Every recipe step must be executable by someone who has never cooked the dish before. Write in this style:
+
+1. **Quantities** — never "a splash", "lidt", "en smule", "to taste", "as needed". Always grams, ml, or tsp/tbsp. If something genuinely flexes, give a starting value and the adjustment range (e.g., "75 ml water; add 25 ml if too thick").
+2. **Heat levels** — explicit numbered scale: "medium-low (4/9)", "medium (6/9)", "medium-high (7/9)", "high (8/9)". State when to change the heat (e.g., "Increase to medium-high (7/9)").
+3. **Pan/pot sizes** — specify when the size matters (e.g., "28 cm nonstick", "3–4 L heavy pot"). Crucial for getting the heat behaviour right.
+4. **Doneness cues, not just timers** — pair every time with what to look for: "6–8 min until no pink remains and a brown fond forms", "until edges look dry and bubbles form on top", "tender-crisp — fork goes in with resistance", "soft-serve thick — mounds on a spoon".
+5. **Salt + pepper amounts** — give starting quantities ("½ tsk salt + ¼ tsk peber"), not "season to taste". The user can adjust at the end.
+6. **Per-portion plating weights** — every recipe ends with explicit portion sizes ("Serve 2 bowls — ~450 g chili + 150 g skyr per portion") so the macros stay honest.
+7. **Active vs total time** at the top of every recipe ("Active: 15 min · Total: 35 min"). Always include "Serves N".
+8. **Storage / meal-prep notes** at the end — fridge days, freezer life, what to add only at serving (e.g., bananas, cucumber, raw herbs).
+9. **Technique tips** — call out the small things that make or break the dish: "toast tomato paste 60 sec — critical for flavour", "rest rice 10 min lid on — don't peek", "do not boil tuna — keeps flakes tender".
+10. **Pantry items** that aren't on the Nemlig grocery list (oil, salt, pepper, soy sauce, lemon, vanilla, baking powder) must be listed in the recipe's ingredients with quantities AND surfaced once at the bottom of the export under "Pantry check".
+
+Each step in steps_dk / steps_en is one numbered instruction. Do NOT compress multiple distinct actions ("sauté onion, add garlic, brown beef") into a single step — split them, because each has its own heat / timing / cue. Steps stay mirrored 1:1 between Danish and English (same count, same order, same level of detail).
 
 If the user says no or wants changes:
 - NEVER use clear_grocery_list. Keep the existing list intact.
@@ -3137,7 +3184,15 @@ def meal_plan_chat(auth: AuthTokens, cli: bool = False, use_template: bool = Tru
         return 1
 
     client, model = ai_result
-    messages = [{"role": "system", "content": MEAL_PLAN_SYSTEM_PROMPT}]
+    _now = datetime.now()
+    _iso_year, _iso_week, _ = _now.isocalendar()
+    system_prompt = MEAL_PLAN_SYSTEM_PROMPT.format(
+        today_iso=_now.strftime("%Y-%m-%d"),
+        weekday=_now.strftime("%A"),
+        iso_year=_iso_year,
+        iso_week=_iso_week,
+    )
+    messages = [{"role": "system", "content": system_prompt}]
 
     # Clear grocery list for fresh planning session
     data = load_grocery_list()
