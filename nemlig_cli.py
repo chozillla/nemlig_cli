@@ -468,6 +468,30 @@ def add_to_basket(auth: AuthTokens, product_id: str, quantity: int = 1) -> dict:
     return resp.json()
 
 
+def remove_from_basket(auth: AuthTokens, product_id: str) -> dict:
+    """Remove a product line from the basket.
+
+    Implemented via AddToBasket with quantity=0 — nemlig.com treats that as a
+    set-quantity-to-zero (line is dropped). Returns the updated basket.
+    """
+    return add_to_basket(auth, product_id, quantity=0)
+
+
+def clear_basket(auth: AuthTokens) -> dict:
+    """Remove every line from the basket. Returns counts of removed/failed lines."""
+    basket = get_basket(auth)
+    lines = basket.get("Lines", []) or []
+    removed, failed = [], []
+    for line in lines:
+        pid = str(line.get("Id"))
+        try:
+            remove_from_basket(auth, pid)
+            removed.append({"id": pid, "name": line.get("Name")})
+        except Exception as e:
+            failed.append({"id": pid, "name": line.get("Name"), "error": str(e)})
+    return {"removed": len(removed), "failed": len(failed), "details": {"removed": removed, "failed": failed}}
+
+
 def get_order_history(auth: AuthTokens, skip: int = 0, take: int = 10) -> dict:
     """Get paginated list of past orders."""
     headers = get_common_headers()

@@ -150,6 +150,18 @@ def basket_add(product_id: str, quantity: int = 1) -> dict:
 
 
 @mcp.tool()
+def basket_remove(product_id: str) -> dict:
+    """Remove a line from the nemlig.com basket by product id. Confirm with the user first."""
+    return ncl.remove_from_basket(_get_auth(), product_id)
+
+
+@mcp.tool()
+def basket_clear() -> dict:
+    """Remove every line from the nemlig.com basket. Destructive — confirm with the user first."""
+    return ncl.clear_basket(_get_auth())
+
+
+@mcp.tool()
 def history(order_id: int | None = None, take: int = 10) -> dict:
     """Order history. Pass order_id for one order's details, otherwise returns the most recent `take`."""
     auth = _get_auth()
