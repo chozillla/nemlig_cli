@@ -1,6 +1,3 @@
-# Chrome profile for MCP (large, user-specific)
-.chrome-profile/
-
 # Python
 __pycache__/
 *.pyc

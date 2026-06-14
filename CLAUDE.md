@@ -14,41 +14,14 @@ just history            # Order history
 
 Requires `NEMLIG_USER` and `NEMLIG_PASS` environment variables.
 
-## MCP Usage
+## Privacy
 
-Chrome DevTools MCP is configured via `.mcp.json`. Use for API discovery and debugging.
-
-**Critical**: MCP calls return large payloads (>25KB). Always run MCP interactions from a sub-agent to avoid context bloat.
-
-**Privacy**: Never record actual personal information (real names, addresses, phone numbers, order IDs). Replace with realistic placeholder values when documenting APIs (e.g., "Anders And", "Vesterbrogade 42", "+4512345678").
-
-Pattern:
-1. Sub-agent navigates, records network traffic, performs action
-2. Sub-agent returns summary (endpoint, headers, body format)
-3. Main context updates documentation or implements code
-
-## Diagrams
-
-Diagrams are stored as `.drawio.svg` files (SVG with embedded draw.io source). Keep them updated when architecture changes.
-
-**To edit**: Open `.drawio.svg` directly in draw.io - the source is embedded.
-
-**To create/update**:
-```bash
-# Create/edit in draw.io, save as .drawio file, then export:
-drawio -x -f svg --embed-diagram -o diagram.drawio.svg diagram.drawio
-rm diagram.drawio  # Keep only the .svg
-```
-
-Current diagrams:
-- `arch_api.drawio.svg` - API architecture (endpoints, auth flow)
-- `mcp-workflow.drawio.svg` - MCP workflow for API discovery
+Never record actual personal information (real names, addresses, phone numbers, order IDs) when documenting APIs. Replace with realistic placeholder values (e.g., "Anders And", "Vesterbrogade 42", "+4512345678").
 
 ## Project Commands
 
-Custom slash commands for this project. **Run both in sub-agents in parallel before every commit.**
+Custom slash commands for this project.
 
-- `/drawio-updater` - Audit and update `.drawio.svg` diagrams
 - `/privacy-checker` - Scan files for personal data leaks
 
 ## Files

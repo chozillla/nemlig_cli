@@ -1,7 +1,7 @@
 [project]
 name = "nemlig-cli"
 version = "0.2.0"
-description = "CLI and GUI for nemlig.com grocery shopping with AI camera"
+description = "CLI for nemlig.com grocery shopping with AI meal planning and fridge scanning"
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31.0",
@@ -20,4 +20,3 @@ dependencies = [
 
 [project.scripts]
 nemlig = "nemlig_cli:main"
-nemlig-gui = "nemlig_gui:main"
