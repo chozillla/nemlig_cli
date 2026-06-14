@@ -1,22 +1,12 @@
 [project]
 name = "nemlig-cli"
-version = "0.2.0"
-description = "CLI for nemlig.com grocery shopping with AI meal planning and fridge scanning"
+version = "0.3.0"
+description = "CLI for nemlig.com grocery shopping (Danish online grocery store)"
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31.0",
-    "openai>=1.0.0",
-    "google-api-python-client>=2.100.0",
-    "google-auth-oauthlib>=1.1.0",
-    "openfoodfacts>=3.0.0",
-    "pyzbar>=0.1.9",
-    "opencv-python>=4.8.0",
-    "Pillow>=10.0.0",
     "argcomplete>=3.0.0",
 ]
-
-# Note: For Raspberry Pi AI Camera support, install picamera2 manually:
-# uv add picamera2
 
 [project.scripts]
 nemlig = "nemlig_cli:main"
