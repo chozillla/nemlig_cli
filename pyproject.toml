@@ -1,12 +1,14 @@
 [project]
 name = "nemlig-cli"
-version = "0.3.0"
-description = "CLI for nemlig.com grocery shopping (Danish online grocery store)"
+version = "0.4.0"
+description = "CLI + MCP server for nemlig.com grocery shopping (Danish online grocery store)"
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31.0",
     "argcomplete>=3.0.0",
+    "mcp>=1.0.0",
 ]
 
 [project.scripts]
 nemlig = "nemlig_cli:main"
+nemlig-mcp = "nemlig_mcp:main"

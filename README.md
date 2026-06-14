@@ -27,14 +27,24 @@ Command-line interface for [nemlig.com](https://www.nemlig.com) Danish online gr
 - **REPL** with tab completion for all commands and subcommands
 - Enters automatically when no command is given
 
-## AI features → Claude Code skills
+## AI features → Claude Code
 
-AI-driven meal planning, fridge suggestions, and recipe extraction are not built into this CLI. They live as **Claude Code skills** that drive this CLI's primitives:
+This CLI has no LLM inside it. Agentic flows live in **Claude Code** in two complementary ways:
 
-- `/nemlig-plan` — weekly meal plan against your diet template (uses Claude Sonnet 4.6)
-- `/nemlig` — search, list, basket, fridge, history, macros, recipes via natural language (uses Claude Haiku 4.5)
+**1. MCP server (`nemlig_mcp.py`)** — exposes every operation as a first-class MCP tool. Once registered, Claude Code can drive nemlig.com from any session without typing a skill prefix. Register once at user scope:
 
-The skills do the LLM reasoning inside Claude Code and call this CLI as a tool. No API keys required in this repo.
+```bash
+claude mcp add --scope user nemlig -- uv --directory $(pwd) run python nemlig_mcp.py
+```
+
+13 tools available: `search`, `details`, `macros`, `recipes`, `basket`, `basket_add`, `history`, `list_show`, `list_add`, `list_remove`, `list_clear`, `list_budget`, `list_sync`.
+
+**2. Skills (`/nemlig`, `/nemlig-plan`)** — orchestrated multi-step flows when you want the workflow encoded:
+
+- `/nemlig-plan` — weekly meal plan against your diet template (delegates to Sonnet 4.6)
+- `/nemlig` — natural-language dispatcher with smart picks (delegates to Haiku 4.5)
+
+Both skills can call MCP tools directly when the server is registered. No API keys required in this repo — Claude reasoning happens inside Claude Code, not inside the CLI process.
 
 ## Requirements
 
@@ -94,6 +104,7 @@ See `nemlig_api.md` for complete API documentation including request/response sc
 ```
 nemlig-cli/
 ├── nemlig_cli.py        # Main CLI — all commands, API client
+├── nemlig_mcp.py        # MCP server exposing CLI operations as tools for Claude Code
 ├── server.py            # Web meal planner backend (ugemad.dk)
 ├── index.html           # Web meal planner landing
 ├── meal-planner.html    # Web meal planner UI
