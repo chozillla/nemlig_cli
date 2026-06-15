@@ -103,17 +103,13 @@ See `nemlig_api.md` for complete API documentation including request/response sc
 
 ```
 nemlig-cli/
-├── nemlig_cli.py        # Main CLI — all commands, API client
-├── nemlig_mcp.py        # MCP server exposing CLI operations as tools for Claude Code
-├── server.py            # Web meal planner backend (ugemad.dk)
-├── index.html           # Web meal planner landing
-├── meal-planner.html    # Web meal planner UI
-├── meal_template.json   # Diet template used by the web meal planner
+├── nemlig_cli.py        # Python client + interactive CLI
+├── nemlig_mcp.py        # MCP server exposing operations as tools for Claude Code
+├── meal_template.json   # Diet/macro template
 ├── justfile             # Command shortcuts
 ├── pyproject.toml       # Python project config
 ├── uv.lock              # Locked dependencies
 ├── .env.example         # Environment variable template
-├── deploy-azure.sh      # Azure deploy script for the web meal planner
 ├── CLAUDE.md            # AI assistant instructions
 ├── README.md            # This file
 └── nemlig_api.md        # API documentation
