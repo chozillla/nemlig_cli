@@ -26,3 +26,7 @@ Thumbs.db
 # n8n workflow files contain credentials locally - push only to nemligAgent repo (cleaned)
 n8n_meal_plan_workflow.json
 n8n_meal_plan_approve.json
+
+# Weekly meal plans — personal data + prices. Kept local by default.
+# Remove this line to start committing the HTML history.
+meal-plans/
