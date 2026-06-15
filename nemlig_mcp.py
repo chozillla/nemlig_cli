@@ -71,6 +71,22 @@ def _product_summary(p: dict) -> dict:
 
 
 @mcp.tool()
+def paths() -> dict:
+    """Return absolute paths the skills need (CLI root, diet template, meal-plans dir).
+
+    Call this FIRST before reading the diet template or writing a meal plan HTML —
+    it lets skills work on any machine without hardcoded absolute paths.
+    The meal-plans/ directory is created lazily on first write.
+    """
+    root = Path(__file__).resolve().parent
+    return {
+        "cli_root": str(root),
+        "meal_template_json": str(root / "meal_template.json"),
+        "meal_plans_dir": str(root / "meal-plans"),
+    }
+
+
+@mcp.tool()
 def search(query: str, limit: int = 10) -> list[dict]:
     """Search nemlig.com products. Query in Danish. Returns id, name, price_kr, brand, package_size."""
     products = ncl.search_products(_get_auth(), query, limit=limit)

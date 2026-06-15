@@ -31,20 +31,20 @@ Command-line interface for [nemlig.com](https://www.nemlig.com) Danish online gr
 
 This CLI has no LLM inside it. Agentic flows live in **Claude Code** in two complementary ways:
 
-**1. MCP server (`nemlig_mcp.py`)** — exposes every operation as a first-class MCP tool. Once registered, Claude Code can drive nemlig.com from any session without typing a skill prefix. Register once at user scope:
+**1. MCP server (`nemlig_mcp.py`)** — exposes every operation as a first-class MCP tool. The repo ships a `.mcp.json` at the root, so when you open this directory in Claude Code, the server auto-registers — no `claude mcp add` step needed on each machine. For the server to be available from any directory (not just this one), register it user-scoped once:
 
 ```bash
 claude mcp add --scope user nemlig -- uv --directory $(pwd) run python nemlig_mcp.py
 ```
 
-13 tools available: `search`, `details`, `macros`, `recipes`, `basket`, `basket_add`, `history`, `list_show`, `list_add`, `list_remove`, `list_clear`, `list_budget`, `list_sync`.
+16 tools available: `paths`, `search`, `details`, `macros`, `recipes`, `basket`, `basket_add`, `basket_remove`, `basket_clear`, `history`, `list_show`, `list_add`, `list_remove`, `list_clear`, `list_budget`, `list_sync`. `paths` returns absolute paths to the CLI root, diet template, and meal-plans dir — used by the skills so they work on any machine without hardcoded paths.
 
 **2. Skills (`/nemlig`, `/nemlig-plan`)** — orchestrated multi-step flows when you want the workflow encoded:
 
-- `/nemlig-plan` — weekly meal plan against your diet template (delegates to Sonnet 4.6)
-- `/nemlig` — natural-language dispatcher with smart picks (delegates to Haiku 4.5)
+- `/nemlig-plan` — weekly meal plan against your diet template (delegates to Opus 4.7)
+- `/nemlig` — natural-language dispatcher with smart picks (delegates to Sonnet 4.6)
 
-Both skills can call MCP tools directly when the server is registered. No API keys required in this repo — Claude reasoning happens inside Claude Code, not inside the CLI process.
+Both skills call `mcp__nemlig__paths` first to discover the CLI's location, then call other MCP tools — no hardcoded paths. No API keys required in this repo — Claude reasoning happens inside Claude Code, not inside the CLI process.
 
 ## Requirements
 
